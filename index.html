@@ -1,0 +1,1257 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zotero Publication Visualizer</title>
+<style>
+:root {
+  --bg:#F5F3ED;--bg2:#EDEBE3;--surface:#FFFFFF;--border:rgba(30,24,14,0.10);
+  --text:#1A1814;--text2:#5A5648;--text3:#8A8274;--grid:rgba(30,24,14,0.07);
+  --c1:#D4A03E;--c2:#4A8EC4;--c3:#3E9E6A;--c4:#7B6FC4;--c5:#C4705A;--c6:#7EBA3A;
+  --hover-hl:rgba(74,142,196,0.12);--sel-hl:rgba(74,142,196,0.22);
+  --maxw:100%;
+  --mono:'SF Mono','Fira Code','Consolas',monospace;
+  --sans:'Hiragino Kaku Gothic ProN','Yu Gothic',Meiryo,-apple-system,system-ui,sans-serif;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#0E1420;--bg2:#121A2A;--surface:#1A2236;--border:rgba(200,220,255,0.10);
+  --text:#E8E4D8;--text2:#9A98A0;--text3:#6A6870;--grid:rgba(200,220,255,0.06);
+  --hover-hl:rgba(74,142,196,0.16);--sel-hl:rgba(74,142,196,0.28);
+}}
+:root[data-theme="light"]{--bg:#F5F3ED;--bg2:#EDEBE3;--surface:#FFFFFF;--border:rgba(30,24,14,0.10);--text:#1A1814;--text2:#5A5648;--text3:#8A8274;--grid:rgba(30,24,14,0.07);--hover-hl:rgba(74,142,196,0.12);--sel-hl:rgba(74,142,196,0.22);}
+:root[data-theme="dark"]{--bg:#0E1420;--bg2:#121A2A;--surface:#1A2236;--border:rgba(200,220,255,0.10);--text:#E8E4D8;--text2:#9A98A0;--text3:#6A6870;--grid:rgba(200,220,255,0.06);--hover-hl:rgba(74,142,196,0.16);--sel-hl:rgba(74,142,196,0.28);}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:17px;line-height:1.6;min-height:100vh;padding:0 0 48px;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
+header{padding:28px 24px 20px;max-width:var(--maxw);margin:0 auto;display:flex;align-items:baseline;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border);}
+header h1{font-size:26px;font-weight:600;letter-spacing:.01em;}
+.header-meta{font-family:var(--mono);font-size:14.5px;color:var(--text3);letter-spacing:.04em;white-space:nowrap;}
+.header-count{font-size:36.5px;font-weight:700;font-family:var(--mono);color:var(--c2);font-variant-numeric:tabular-nums;letter-spacing:-.02em;}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;padding:14px 24px;max-width:var(--maxw);margin:0 auto;border-bottom:1px solid var(--border);}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:15px;color:var(--text2);}
+.legend-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
+.chart-section{padding:20px 24px 0;max-width:var(--maxw);margin:0 auto;}
+.chart-wrap{position:relative;width:100%;cursor:crosshair;}
+#main-canvas{display:block;width:100%;height:260px;}
+.year-tooltip{position:absolute;top:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-family:var(--mono);font-size:14.5px;color:var(--text2);pointer-events:none;opacity:0;transition:opacity .15s;min-width:155px;z-index:10;}
+.year-tooltip.visible{opacity:1;}
+.yt-year{font-size:23.5px;font-weight:700;color:var(--text);line-height:1.2;margin-bottom:6px;font-variant-numeric:tabular-nums;}
+.yt-row{display:flex;justify-content:space-between;gap:8px;line-height:1.8;}
+.yt-dot{display:inline-block;width:7px;height:7px;border-radius:1px;margin-right:4px;vertical-align:middle;margin-top:-1px;}
+.yt-total{font-weight:700;color:var(--text);border-top:1px solid var(--border);margin-top:4px;padding-top:4px;}
+.topic-section{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
+.topic-label{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);padding:10px 0 5px;}
+.topic-grid{display:flex;overflow-x:auto;padding-bottom:2px;padding-left:42px;padding-right:8px;}
+.topic-grid::-webkit-scrollbar{display:none;}
+.topic-col{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;align-items:center;cursor:pointer;padding:2px 1px;border-radius:3px;transition:background .1s;}
+.topic-col:hover{background:var(--hover-hl);}
+.topic-col.selected{background:var(--sel-hl);}
+.topic-chip{border-radius:3px;font-size:12px;font-weight:700;padding:2px 1px;white-space:nowrap;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4);width:100%;text-align:center;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em;}
+.topic-chip.empty{background:transparent;opacity:0;pointer-events:none;}
+.topic-yr{font-family:var(--mono);font-size:12px;color:var(--text3);margin-top:2px;font-variant-numeric:tabular-nums;}
+.detail-section{max-width:var(--maxw);margin:0 auto;padding:14px 24px 0;}
+.detail-hdr{font-family:var(--mono);font-size:14.5px;color:var(--text3);letter-spacing:.05em;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.dhyr{font-size:28.5px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;letter-spacing:-.02em;}
+.dhtot{font-size:17px;color:var(--c2);font-weight:600;}
+.detail-note{font-size:13px;color:var(--text3);margin-left:auto;}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+@media(max-width:680px){.detail-grid{grid-template-columns:1fr;}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:13px 15px;}
+.card-title{font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid var(--border);}
+.prow{display:flex;align-items:baseline;justify-content:space-between;padding:5px 6px;border-bottom:1px solid var(--grid);gap:8px;cursor:pointer;border-radius:4px;margin:0 -6px;transition:background .1s;}
+.prow:last-child{border-bottom:none;}
+.prow:hover{background:var(--hover-hl);}
+.prow.active{background:var(--sel-hl);}
+.pname{font-size:17px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+.pcnt{font-family:var(--mono);font-size:14.5px;color:var(--text3);font-variant-numeric:tabular-nums;white-space:nowrap;padding:1px 6px;background:var(--bg);border-radius:10px;flex-shrink:0;transition:background .1s,color .1s;}
+.prow.active .pcnt{background:var(--c2);color:#fff;}
+.kwlist{display:flex;flex-direction:column;gap:4px;}
+.kwitem{display:flex;align-items:center;gap:8px;cursor:pointer;border-radius:4px;padding:4px 6px;margin:0 -6px;transition:background .1s;}
+.kwitem:hover{background:var(--hover-hl);}
+.kwitem.active{background:var(--sel-hl);}
+.kwbar-wrap{flex:1;height:4px;background:var(--bg2);border-radius:2px;overflow:hidden;}
+.kwbar{height:100%;border-radius:2px;}
+.kwname{font-size:15.5px;color:var(--text);width:126px;flex-shrink:0;}
+.kwcnt{font-family:var(--mono);font-size:13px;color:var(--text3);font-variant-numeric:tabular-nums;width:24px;text-align:right;flex-shrink:0;}
+.nodata{font-size:14.5px;color:var(--text3);font-style:italic;padding:6px 0;}
+/* ── 論文リスト ───── */
+#ps{max-width:var(--maxw);margin:0 auto;padding:14px 24px 0;}
+.ps-hdr{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--border);}
+.ps-lbl{font-family:var(--mono);font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);}
+.ps-yr{font-size:26px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;letter-spacing:-.02em;}
+.ps-tp{font-size:15.5px;font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4);padding:2px 9px;border-radius:10px;letter-spacing:.02em;}
+.ps-cnt{font-family:var(--mono);font-size:15.5px;color:var(--text3);}
+.ps-clear{font-size:13px;color:var(--text3);cursor:pointer;padding:3px 10px;border:1px solid var(--border);border-radius:10px;background:transparent;font-family:var(--mono);transition:border-color .15s,color .15s;}
+.ps-clear:hover{color:var(--text);border-color:var(--text3);}
+.exp-group{margin-left:auto;display:flex;align-items:center;gap:6px;}
+.exp-lbl{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);}
+.exp-btn{font-family:var(--sans);font-size:12.5px;color:var(--text2);cursor:pointer;padding:4px 11px;border:1px solid var(--border);border-radius:10px;background:var(--surface);transition:border-color .15s,color .15s,background .15s;}
+.exp-btn:hover{color:var(--c2);border-color:var(--c2);}
+.exp-btn.done{color:#fff;background:var(--c3);border-color:var(--c3);}
+.exp-btn.err{color:#fff;background:var(--c5);border-color:var(--c5);}
+.exp-style{font-family:var(--sans);font-size:12.5px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px 8px;cursor:pointer;outline:none;}
+.exp-style:hover,.exp-style:focus{border-color:var(--c2);color:var(--text);}
+.plist{display:flex;flex-direction:column;gap:18px;padding-bottom:40px;}
+.cat-block{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.cat-hdr{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--bg2);border-bottom:1px solid var(--border);}
+.cat-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0;}
+.cat-name{font-size:14.5px;font-weight:700;letter-spacing:.04em;color:var(--text2);}
+.cat-cnt{font-family:var(--mono);font-size:14.5px;color:var(--text3);margin-left:auto;}
+.paper-row{display:flex;align-items:baseline;gap:10px;padding:7px 14px;border-bottom:1px solid var(--grid);}
+.paper-row:last-child{border-bottom:none;}
+.ptitle{font-size:16px;color:var(--text);flex:1;line-height:1.5;}
+.pmeta{font-size:13.5px;color:var(--text3);font-family:var(--mono);white-space:nowrap;flex-shrink:0;max-width:min(34vw,520px);overflow:hidden;text-overflow:ellipsis;}
+.zlink{font-size:13px;color:var(--text3);text-decoration:none;flex-shrink:0;padding:1px 5px;border:1px solid var(--border);border-radius:3px;font-family:var(--mono);transition:color .1s,border-color .1s;}
+.zlink:hover{color:var(--c2);border-color:var(--c2);}
+@media(max-width:680px){.paper-row{flex-wrap:wrap;gap:3px;}.pmeta{max-width:100%;white-space:normal;}}
+/* ── 意味検索 ───── */
+.search-section{padding:16px 24px 0;}
+.search-box{display:flex;gap:8px;align-items:center;}
+.search-input{flex:1;font-family:var(--sans);font-size:17.5px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;outline:none;transition:border-color .15s;}
+.search-input:focus{border-color:var(--c2);}
+.search-input::placeholder{color:var(--text3);}
+.search-btn{font-family:var(--sans);font-size:16px;font-weight:600;color:#fff;background:var(--c2);border:none;border-radius:8px;padding:10px 18px;cursor:pointer;white-space:nowrap;transition:opacity .15s;flex-shrink:0;}
+.search-btn:hover{opacity:.88;}
+.search-btn:disabled{opacity:.5;cursor:default;}
+.search-clear{font-size:13px;color:var(--text3);cursor:pointer;padding:3px 10px;border:1px solid var(--border);border-radius:10px;background:transparent;font-family:var(--mono);transition:border-color .15s,color .15s;flex-shrink:0;}
+.search-clear:hover{color:var(--text);border-color:var(--text3);}
+.search-status{font-family:var(--mono);font-size:13.5px;color:var(--text3);padding:7px 2px 0;min-height:14px;}
+.search-status.err{color:var(--c5);}
+.sr-row{display:flex;align-items:baseline;gap:10px;padding:7px 14px;border-bottom:1px solid var(--grid);}
+.sr-row:last-child{border-bottom:none;}
+.sr-score{font-family:var(--mono);font-size:13.5px;color:var(--c2);font-variant-numeric:tabular-nums;width:34px;flex-shrink:0;text-align:right;}
+@media(max-width:680px){.sr-row{flex-wrap:wrap;gap:3px;}}
+/* ── セットアップ画面 ───── */
+#setup{max-width:640px;margin:0 auto;padding:64px 24px 48px;}
+.su-eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;}
+.su-h1{font-size:30px;font-weight:600;letter-spacing:.01em;line-height:1.3;margin-bottom:12px;}
+.su-lead{font-size:15px;color:var(--text2);line-height:1.75;margin-bottom:30px;}
+.su-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;}
+.su-row{margin-bottom:18px;}
+.su-row:last-of-type{margin-bottom:0;}
+.su-label{display:block;font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:5px;}
+.su-hint{font-size:12.5px;color:var(--text3);line-height:1.6;margin-top:5px;}
+.su-hint a{color:var(--c2);}
+.su-input{width:100%;font-family:var(--sans);font-size:15px;color:var(--text);background:var(--bg);
+  border:1px solid var(--border);border-radius:8px;padding:11px 13px;outline:none;transition:border-color .15s;}
+.su-input:focus{border-color:var(--c2);}
+.su-input::placeholder{color:var(--text3);}
+.su-actions{display:flex;gap:10px;align-items:center;margin-top:26px;flex-wrap:wrap;}
+.su-btn{font-family:var(--sans);font-size:14.5px;font-weight:600;color:#fff;background:var(--c2);
+  border:none;border-radius:8px;padding:12px 24px;cursor:pointer;transition:opacity .15s;}
+.su-btn:hover{opacity:.88;}
+.su-btn:disabled{opacity:.5;cursor:default;}
+.su-btn.ghost{color:var(--text2);background:transparent;border:1px solid var(--border);}
+.su-btn.ghost:hover{color:var(--c2);border-color:var(--c2);opacity:1;}
+.su-msg{font-family:var(--mono);font-size:13px;color:var(--text3);margin-top:16px;min-height:18px;line-height:1.6;}
+.su-msg.err{color:var(--c5);}
+.su-details{margin-top:18px;font-size:13px;color:var(--text3);}
+.su-details summary{cursor:pointer;color:var(--c2);}
+.su-details p{margin-top:9px;line-height:1.75;}
+.su-note{margin-top:30px;padding-top:20px;border-top:1px solid var(--border);font-size:12.5px;color:var(--text3);line-height:1.8;}
+.su-note strong{color:var(--text2);}
+</style>
+<div id="setup">
+  <div class="su-eyebrow">Zotero Publication Visualizer</div>
+  <div class="su-h1">Zoteroの業績を、たどれる形に</div>
+  <p class="su-lead">
+    Zoteroに集約した業績を、年表・研究トピックの変遷・共著者ネットワークとして可視化します。
+    ブラウザ内で動く埋め込みモデルによる<strong>意味検索</strong>と、
+    IEEE / ACM / 情報処理学会 / 電子情報通信学会の<strong>引用形式での書き出し</strong>に対応しています。
+    <br><br>
+    サーバーは使いません。データはあなたのブラウザの中だけで処理されます。
+  </p>
+
+  <div class="su-card">
+    <div class="su-row">
+      <label class="su-label" for="suLib">ZoteroのユーザーID</label>
+      <input id="suLib" class="su-input" type="text" placeholder="例: 15268781" autocomplete="off">
+      <div class="su-hint">
+        数値のIDです。<a href="https://www.zotero.org/settings/keys" target="_blank" rel="noopener">zotero.org/settings/keys</a> の
+        「Your user ID for use in API calls is …」に表示されます。
+        グループライブラリは <code>groups/1234567</code> の形式で入力できます。
+      </div>
+    </div>
+
+    <div class="su-row">
+      <label class="su-label" for="suKey">APIキー<span style="font-weight:400;color:var(--text3)">（非公開ライブラリのみ必要）</span></label>
+      <input id="suKey" class="su-input" type="password" placeholder="公開ライブラリなら空のままでOK" autocomplete="off">
+      <div class="su-hint">
+        読み取り専用のキーで十分です。入力した内容はこのブラウザから外に出ません（保存もされません）。
+      </div>
+    </div>
+
+    <details class="su-details">
+      <summary>表示の設定（任意）</summary>
+      <div class="su-row" style="margin-top:14px">
+        <label class="su-label" for="suName">あなたの氏名</label>
+        <input id="suName" class="su-input" type="text" placeholder="空欄なら最も多い著者を自動判定" autocomplete="off">
+        <div class="su-hint">見出しに表示し、共著者の集計から除外します。</div>
+      </div>
+      <div class="su-row">
+        <label class="su-label" for="suAlias">氏名の別表記</label>
+        <textarea id="suAlias" class="su-input" rows="3" placeholder="安本 慶一 = Yasumoto Keiichi&#10;諏訪 博彦 = Suwa Hirohiko" style="resize:vertical;font-size:13.5px"></textarea>
+        <div class="su-hint">
+          和名と欧文表記は文字種が違うため自動では同一人物と判定できません。
+          1行に1組、<code>和名 = 欧文表記</code> の形で書くとまとめて集計します。
+          （欧文の「姓 名／名 姓」の入れ替わりは自動で統合します）
+        </div>
+      </div>
+      <div class="su-row">
+        <label class="su-label" for="suUser">Zoteroのユーザー名</label>
+        <input id="suUser" class="su-input" type="text" placeholder="例: yarakawa" autocomplete="off">
+        <div class="su-hint">各文献から Zotero を開くリンクに使います。空欄ならリンクを表示しません。</div>
+      </div>
+    </details>
+
+    <div class="su-actions">
+      <button id="suGo" class="su-btn">可視化する</button>
+      <button id="suDemo" class="su-btn ghost">デモを見る（荒川 豊の業績 1,050件）</button>
+    </div>
+    <div id="suMsg" class="su-msg"></div>
+  </div>
+
+  <div class="su-note">
+    <strong>うまく表示されない場合</strong><br>
+    ・コレクション（フォルダ）で分類されていない文献は「未分類」にまとめられます<br>
+    ・発行年が入っていない文献は集計対象外です<br>
+    ・意味検索は初回のみ約120MBのモデルを読み込みます（以降はブラウザに保存されます）
+  </div>
+</div>
+
+<div id="main" style="display:none">
+<header>
+  <div>
+    <div id="hdrEyebrow" style="font-size:14.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:3px"></div>
+    <h1 id="hdrTitle"></h1>
+  </div>
+  <div style="text-align:right">
+    <div class="header-count" id="hdrCount">–</div>
+    <div class="header-meta" id="hdrRange">件</div>
+  </div>
+</header>
+<div class="legend wrap" id="legend"></div>
+<div class="search-section wrap">
+  <div class="search-box">
+    <input type="text" id="ssInput" class="search-input" placeholder="意味検索（例：高齢者の見守りセンサ、災害時の情報配信、活動量推定）" autocomplete="off">
+    <button id="ssBtn" class="search-btn">検索</button>
+    <button id="ssClearBtn" class="search-clear" style="display:none">✕ クリア</button>
+  </div>
+  <div id="ssStatus" class="search-status"></div>
+</div>
+<div id="ss" class="wrap" style="display:none;padding-top:10px;">
+  <div class="ps-hdr">
+    <span class="ps-lbl">意味検索の結果</span>
+    <span id="ss-q" class="ps-yr" style="font-size:19.5px"></span>
+    <span id="ss-cnt" class="ps-cnt"></span>
+    <span class="exp-group">
+      <span class="exp-lbl">エクスポート</span>
+      <select class="exp-style" onchange="setCiteStyle(this.value)" title="引用スタイル"></select>
+      <button class="exp-btn" onclick="exportResults('md',this,'ss')" title="参考文献リスト（テキスト）をダウンロード">テキスト</button>
+      <button class="exp-btn" onclick="exportResults('bib',this,'ss')" title="BibTeX形式でダウンロード">BibTeX</button>
+      <button class="exp-btn" onclick="exportResults('copy',this,'ss')" title="Markdownをクリップボードにコピー">コピー</button>
+    </span>
+  </div>
+  <div class="plist"><div class="cat-block" id="srlist"></div></div>
+</div>
+<div class="chart-section">
+  <div class="chart-wrap" id="cwrap">
+    <canvas id="mc"></canvas>
+    <div class="year-tooltip" id="tt">
+      <div class="yt-year" id="tt-yr"></div>
+      <div id="tt-rows"></div>
+      <div class="yt-row yt-total"><span>合計</span><span id="tt-tot"></span></div>
+    </div>
+  </div>
+</div>
+<div class="topic-section">
+  <div class="topic-label">研究トピックの変遷（論文タイトルから自動抽出）</div>
+  <div class="topic-grid" id="tgrid"></div>
+</div>
+<div class="detail-section">
+  <div class="detail-hdr">
+    <span id="dyr" class="dhyr"></span>
+    <span id="dtot" class="dhtot"></span>
+    <span class="detail-note" id="dhint">バーまたはトピックをクリックで固定</span>
+  </div>
+  <div class="detail-grid">
+    <div class="card">
+      <div class="card-title">主要共著者 Top 5</div>
+      <div id="coa-list"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">筆頭著者 Top 5</div>
+      <div id="stu-list"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">研究トピック</div>
+      <div id="kw-list" class="kwlist"></div>
+    </div>
+  </div>
+</div>
+<div id="ps" style="display:none">
+  <div class="ps-hdr">
+    <span class="ps-lbl">論文リスト</span>
+    <span id="ps-yr" class="ps-yr"></span>
+    <span id="ps-tp" class="ps-tp" style="display:none"></span>
+    <span id="ps-cnt" class="ps-cnt"></span>
+    <span class="exp-group">
+      <span class="exp-lbl">エクスポート</span>
+      <select class="exp-style" onchange="setCiteStyle(this.value)" title="引用スタイル"></select>
+      <button class="exp-btn" onclick="exportResults('md',this,'ps')" title="参考文献リスト（テキスト）をダウンロード">テキスト</button>
+      <button class="exp-btn" onclick="exportResults('bib',this,'ps')" title="BibTeX形式でダウンロード">BibTeX</button>
+      <button class="exp-btn" onclick="exportResults('copy',this,'ps')" title="Markdownをクリップボードにコピー">コピー</button>
+    </span>
+    <button class="ps-clear" onclick="clearPS()">✕ クリア</button>
+  </div>
+  <div class="plist" id="plist"></div>
+</div></div>
+<script>
+/* ══════════════════════════════════════════════════════════
+   Zotero から取得して集計するパイプライン（ブラウザ内で完結）
+   ══════════════════════════════════════════════════════════ */
+// デモ表示用。和名と欧文表記の対応は自動判定できないため、あらかじめ用意しておく
+const DEMO_ALIAS=[
+  "安本 慶一 = Yasumoto Keiichi",
+  "中村 優吾 = Nakamura Yugo",
+  "諏訪 博彦 = Suwa Hirohiko",
+  "福田 晃 = Fukuda Akira",
+  "田頭 茂明 = Tagashira Shigeaki",
+  "山中 直明 = Yamanaka Naoaki",
+  "藤本 まなと = Fujimoto Manato",
+  "石田 繁巳 = Ishida Shigemi",
+  "松田 裕貴 = Matsuda Yuki",
+  "岡本 聡 = Okamoto Satoru",
+  "峯 恒憲 = Mine Tsunenori",
+  "福嶋 政期 = Fukushima Shogo",
+  "崔 赫秦 = Choi Hyuckjin",
+  "清水 翔 = Shimizu Sho",
+  "柏本 幸俊 = Kashimoto Yukitoshi",
+  "水本 旭洋 = Mizumoto Teruhiro"
+];
+const DEMO={type:'users',id:'15268781',name:'荒川 豊',user:'yarakawa',alias:DEMO_ALIAS.join('\n')};
+let CFG={ownerName:'',subtitle:'研究業績の変遷',eyebrow:'Research Output Timeline',zoteroUsername:''};
+let COLS=[],CAT_CC={},TM={},D=null;
+// カテゴリ用パレット（コレクション数が多い場合は循環）
+const CATPAL=['#D4A03E','#4A8EC4','#3E9E6A','#7B6FC4','#C4705A','#7EBA3A',
+              '#5AA9A0','#B5763F','#8E7CC3','#C45A8E','#6C83B5','#9EB33A'];
+const TOPICPAL=['#FF6B6B','#4DC6E8','#38D9A9','#AA96DA','#F8A07A','#6BCB77','#F4CC3A',
+                '#22B8CF','#E880A0','#B8A9E8','#FF9551','#46D7C0','#F78FB3','#6C83B5'];
+
+/* ── Zotero API ───── */
+function zHeaders(key){
+  const h={'Zotero-API-Version':'3'};
+  if(key)h['Zotero-API-Key']=key;
+  return h;
+}
+async function zPaged(base,path,key,onProgress){
+  const out=[];let start=0,total=null;
+  for(;;){
+    const url=`${base}${path}?limit=100&start=${start}`;
+    const r=await fetch(url,{headers:zHeaders(key)});
+    if(!r.ok){
+      if(r.status===403)throw new Error('アクセスが拒否されました（403）。非公開ライブラリの場合はAPIキーが必要です。');
+      if(r.status===404)throw new Error('ライブラリが見つかりません（404）。ユーザーID／グループIDを確認してください。');
+      throw new Error(`Zotero API エラー: HTTP ${r.status}`);
+    }
+    if(total===null)total=parseInt(r.headers.get('Total-Results')||'0',10);
+    const chunk=await r.json();
+    if(!chunk.length)break;
+    out.push(...chunk);start+=chunk.length;
+    if(onProgress)onProgress(start,total);
+    if(start>=total)break;
+    const backoff=r.headers.get('Backoff')||r.headers.get('Retry-After');
+    await new Promise(s=>setTimeout(s,backoff?parseInt(backoff,10)*1000:60));
+  }
+  return out;
+}
+
+/* ── 文字列処理（Python版と同じ挙動） ───── */
+const _cjk=/[぀-ヿ一-鿿]/;
+function normkey(s){
+  s=(s||'').normalize('NFKC').toLowerCase();
+  s=s.replace(/\[[^\]]*\]/g,'');
+  return s.replace(/[^0-9a-z぀-ヿ一-鿿]+/g,'');
+}
+function cleanTitle(t){
+  t=(t||'').normalize('NFKC').trim();
+  t=t.replace(/^[A-Z]+-\d+(?:-\d+)*\s+/,'');          // B-15-13 などのセッション番号
+  t=t.replace(/\s*--\s*\([^)]*\)\s*$/,'').trim();      // -- (特集 ○○)
+  while(/\s*\([^)]*\)\s*$/.test(t))t=t.replace(/\s*\([^)]*\)\s*$/,'').trim();
+  return t;
+}
+function nameTokens(n){
+  return (n||'').normalize('NFKC').toLowerCase().replace(/[.,]/g,'')
+    .split(/[\s　\-・]+/).filter(Boolean);
+}
+// 欧文は「姓 名」と「名 姓」が混在するため、語を並べ替えて同一視する
+// （実例では Yasumoto Keiichi と Keiichi YASUMOTO のような組が18組あった）
+function personKey(n){
+  n=(n||'').normalize('NFKC').trim();
+  if(_cjk.test(n))return n.replace(/[\s　\-.・,]/g,'').toLowerCase();
+  return nameTokens(n).sort().join('');
+}
+
+/* ── 著者の取り出し ───── */
+// creatorType は itemType により author / presenter などに変わるため広く拾う
+// itemType を区分名として表示するときの日本語ラベル
+const ITYPE_JA={journalArticle:'学術論文',conferencePaper:'会議論文',presentation:'発表',
+  book:'著書',bookSection:'著書（章）',magazineArticle:'記事',newspaperArticle:'新聞記事',
+  patent:'特許',thesis:'学位論文',report:'報告書',preprint:'プレプリント',
+  webpage:'ウェブ',dataset:'データセット',computerProgram:'ソフトウェア',manuscript:'原稿',
+  blogPost:'ブログ',encyclopediaArticle:'事典項目',dictionaryEntry:'辞典項目',
+  document:'資料',letter:'書簡',interview:'インタビュー',film:'映像',audioRecording:'音声',
+  videoRecording:'映像',podcast:'ポッドキャスト',map:'地図',artwork:'作品',
+  standard:'規格',statute:'法令',bill:'法案',case:'判例',hearing:'公聴会',
+  radioBroadcast:'ラジオ',tvBroadcast:'テレビ',forumPost:'投稿',instantMessage:'メッセージ',
+  email:'メール',presentation2:'発表'};
+const AUTHORISH=new Set(['author','presenter','contributor','inventor','bookAuthor','editor']);
+function itemAuthors(d){
+  const out=[];
+  for(const c of d.creators||[]){
+    if(!AUTHORISH.has(c.creatorType))continue;
+    const ln=(c.lastName||'').trim(),fn=(c.firstName||'').trim();
+    let full=fn?`${ln} ${fn}`.trim():ln;
+    if(!full)full=(c.name||'').trim();
+    if(!full)continue;
+    if(/^[A-Za-z]\.?$/.test(full)||full.length<=1)continue;   // イニシャルだけの断片を除外
+    out.push(full);
+  }
+  return out;
+}
+
+/* ── トピック自動抽出 ───── */
+const TOPIC_STOP=new Set([
+ '提案','検討','実装','評価','開発','システム','手法','研究','実験','分析','設計','構築','利用','向け',
+ '基づく','関する','ための','における','よる','用いた','考慮','支援','推定','実現','改善','比較','調査',
+ '報告','特集','および','会議','論文','大会','講演','可能','使用','適用','機能','情報','技術','方法',
+ '対象','結果','影響','効果','装置','処理','制御','解析','抽出','生成','表示','入力','出力','機構',
+ 'using','based','toward','towards','system','systems','method','methods','approach','approaches',
+ 'analysis','evaluation','study','studies','research','development','design','implementation',
+ 'proposal','proposed','novel','improved','efficient','effective','with','from','into','their',
+ 'which','that','this','these','those','have','been','more','than','such','also','can','via','for',
+ 'and','the','its','our','new','use','used','uses','case','cases','paper','papers',
+ 'best','good','better','high','low','large','small','first','second','third','other','others',
+ 'between','through','within','across','about','over','under','into','being','both','each',
+
+]);
+// 「〜手法/方式/装置」で終わる語は主題ではなく方法論なので topic にしない
+const TOPIC_SUF=/(手法|方式|装置|技術|機構|方法|処理|制御|解析|試作|実証|機能|環境)$/;
+function extractTerms(title){
+  const s=new Set(),t=title||'';
+  for(let w of (t.match(/[A-Za-z][A-Za-z0-9+\-]{2,}/g)||[])){
+    w=w.toLowerCase().replace(/[-+]+$/,'');
+    if(w.length>=3&&!TOPIC_STOP.has(w))s.add(w);
+  }
+  for(const w of (t.match(/[ァ-ヶ][ァ-ヶー]{2,}/g)||[]))if(!TOPIC_STOP.has(w))s.add(w);
+  // 漢字は3〜4文字。2文字だと「行動」「認識」のような断片が主題として出てしまう
+  for(const run of (t.match(/[一-龥]{3,}/g)||[])){
+    for(let n=3;n<=4;n++)for(let i=0;i+n<=run.length;i++){
+      const g=run.slice(i,i+n);
+      if(!TOPIC_STOP.has(g)&&!TOPIC_SUF.test(g))s.add(g);
+    }
+  }
+  return s;
+}
+function buildTopics(titles,want){
+  const df=new Map();
+  const perDoc=titles.map(t=>{
+    const terms=extractTerms(t);
+    for(const x of terms)df.set(x,(df.get(x)||0)+1);
+    return terms;
+  });
+  const n=titles.length,lo=Math.max(4,Math.round(n*0.008)),hi=Math.round(n*0.35);
+  let cand=[...df.entries()].filter(([,c])=>c>=lo&&c<=hi);
+  // 断片の除去: より長い語がほぼ同じ出現数を保つなら、短い方は上位語の一部にすぎない
+  //（例「定手法」は「推定手法」の一部）
+  const dfm=new Map(cand);
+  cand=cand.filter(([t,c])=>{
+    for(const [t2,c2] of dfm)if(t2!==t&&t2.includes(t)&&c2>=c*0.7)return false;
+    return true;
+  });
+  // 日本語は長い語ほど具体的なので、長さで重み付けする
+  const score=([t,c])=>/[一-龥ァ-ヶ]/.test(t)?c*(1+0.5*(t.length-3)):c;
+  cand.sort((a,b)=>score(b)-score(a));
+  const picked=[];
+  for(const [term,c] of cand){
+    if(picked.length>=want)break;
+    if(picked.some(([p])=>p.includes(term)||term.includes(p)))continue;
+    picked.push([term,c]);
+  }
+  return {topics:picked.map(([t])=>t),perDoc};
+}
+
+/* ── 集計本体 ───── */
+function analyze(items,collections,opts){
+  // トップレベルのコレクションだけをカテゴリとして使う
+  const top=collections.filter(c=>!c.data.parentCollection);
+  const cmap={};top.forEach(c=>{cmap[c.data.key]=c.data.name;});
+  const catNames=top.map(c=>c.data.name).sort((a,b)=>a.localeCompare(b,'ja'));
+  const UNCAT='未分類';
+
+  const rows=[];
+  for(const it of items){
+    const d=it.data||{};
+    if(d.itemType==='attachment'||d.itemType==='note')continue;
+    const raw=d.title||'';if(!raw)continue;
+    // itemType により日付フィールドが異なる（特許は filingDate、判例は dateDecided など）
+    const ds=(it.meta&&it.meta.parsedDate)||d.date||d.issueDate||d.filingDate||
+             d.priorityDate||d.dateDecided||d.dateEnacted||d.issued||'';
+    const m=String(ds).match(/(19|20)\d{2}/);
+    if(!m)continue;
+    const y=parseInt(m[0],10);
+    if(y<1950||y>new Date().getFullYear()+2)continue;
+    const cats=(d.collections||[]).map(k=>cmap[k]).filter(Boolean);
+    rows.push({
+      key:d.key,title:cleanTitle(raw),y,
+      cat:cats.length?cats[0]:UNCAT,
+      _type:ITYPE_JA[d.itemType]||d.itemType,
+      authors:itemAuthors(d),it:d.itemType,
+      v:(d.publicationTitle||d.proceedingsTitle||d.bookTitle||d.conferenceName||d.meetingName||'').trim(),
+      doi:(d.DOI||'').trim(),u:(d.url||'').trim(),pg:(d.pages||'').trim(),
+      vl:(d.volume||'').trim(),is:(d.issue||'').trim(),pb:(d.publisher||'').trim(),
+    });
+  }
+  if(!rows.length)throw new Error('対象となる文献が見つかりませんでした。コレクションと発行年が設定されているか確認してください。');
+
+  // コレクションで分類されていないライブラリでは、文献の種類を区分として使う
+  // （全件が「未分類」の1色になってしまうのを避ける）
+  const uncatRate=rows.filter(r=>r.cat===UNCAT).length/rows.length;
+  const byType=uncatRate>0.7;
+  if(byType)rows.forEach(r=>{r.cat=r._type;});
+
+  // 同一タイトルの重複を落とす
+  const seen=new Set(),uniq=[];
+  for(const r of rows){const k=normkey(r.title);if(seen.has(k))continue;seen.add(k);uniq.push(r);}
+
+  // 和名と欧文表記（安本 慶一 / Yasumoto Keiichi）は文字種が違うため自動では結び付けられない。
+  // 利用者が "A = B" 形式で指定した対応を反映する。
+  const aliasMap=new Map();
+  (opts.aliases||[]).forEach(([a,b])=>{
+    const ka=personKey(a),kb=personKey(b);
+    if(ka&&kb&&ka!==kb)aliasMap.set(kb,ka);
+  });
+  const keyOf=n=>{const k=personKey(n);return aliasMap.get(k)||k;};
+
+  // 氏名の表記ゆれを統合し、最も多く使われている表記を代表にする
+  const forms=new Map();
+  for(const r of uniq)for(const a of r.authors){
+    const k=keyOf(a);if(!k)continue;
+    if(!forms.has(k))forms.set(k,new Map());
+    const m2=forms.get(k);m2.set(a,(m2.get(a)||0)+1);
+  }
+  const canon=new Map();
+  for(const [k,m2] of forms){
+    canon.set(k,[...m2.entries()].sort((a,b)=>b[1]-a[1]||b[0].length-a[0].length)[0][0]);
+  }
+  const disp=a=>canon.get(keyOf(a))||a;
+
+  // 単独姓（"Arakawa"）を、その語を含むフルネームが1つだけならそちらに寄せる
+  const tokOf=new Map();
+  for(const [k,m2] of forms)tokOf.set(k,new Set(nameTokens([...m2.keys()][0])));
+  for(const [k,tk] of tokOf){
+    if(tk.size!==1||k.length<3)continue;
+    const only=[...tk][0];
+    const cands=[...tokOf.entries()].filter(([k2,t2])=>k2!==k&&t2.size>1&&t2.has(only));
+    if(cands.length===1)canon.set(k,canon.get(cands[0][0]));
+  }
+  // 別表記を指定した場合は、利用者が左側に書いた表記を代表にする
+  (opts.aliases||[]).forEach(([a])=>{const k=keyOf(a);if(canon.has(k))canon.set(k,a);});
+  const disp2=a=>canon.get(keyOf(a))||a;
+
+  // 所有者の別表記（荒川 豊 / Arakawa Yutaka）を推定する。
+  // 同一人物は1つの論文に1回しか現れないので、
+  // 「最頻の表記と決して同時に出現しない」表記は同一人物の別表記と判断できる。
+  // 出現率の閾値だけで判定すると、多産な共著者（この例では19.8%）を誤って除外してしまう。
+  const freq=new Map(),co=new Map();
+  for(const r of uniq){
+    const ks=[...new Set(r.authors.map(keyOf))].filter(Boolean);
+    ks.forEach(k=>{
+      freq.set(k,(freq.get(k)||0)+1);
+      if(!co.has(k))co.set(k,new Set());
+      ks.forEach(k2=>{if(k2!==k)co.get(k).add(k2);});
+    });
+  }
+  const N=uniq.length;
+  let topKey=null;
+  if(opts.ownerName&&keyOf(opts.ownerName)&&freq.has(keyOf(opts.ownerName)))topKey=keyOf(opts.ownerName);
+  else if(freq.size)topKey=[...freq.entries()].sort((a,b)=>b[1]-a[1])[0][0];
+  const ownerKeys=new Set(topKey?[topKey]:[]);
+  if(topKey){
+    for(const [k,c] of freq){
+      if(k===topKey||c<N*0.03)continue;
+      if(co.get(topKey).has(k))continue;                    // 同時に出るなら別人
+      if((freq.get(topKey)+c)/N<0.8)continue;               // 合わせてほぼ全論文を覆うか
+      ownerKeys.add(k);
+    }
+  }
+  const ownerName=opts.ownerName||(topKey?canon.get(topKey)||'':'');
+
+  // トピック抽出
+  const {topics,perDoc}=buildTopics(uniq.map(r=>r.title),14);
+  const tset=new Set(topics);
+  uniq.forEach((r,i)=>{r.tp=[...perDoc[i]].filter(x=>tset.has(x));});
+  // チップは幅が狭いので、全角は3文字・欧文は4文字に詰めて大文字化する
+  // 列幅が狭いので3文字に詰める。全文はチップの title 属性で見られる
+  const shortLabel=t=>_cjk.test(t)||/[ァ-ヶ]/.test(t)
+    ? (t.length<=3?t:t.slice(0,3))
+    : (t.length<=3?t:t.slice(0,3)).toUpperCase();
+  TM={};topics.forEach((t,i)=>{
+    TM[t]={c:TOPICPAL[i%TOPICPAL.length],s:shortLabel(t)};
+  });
+
+  // 年の範囲
+  const ys=uniq.map(r=>r.y),y0=Math.min(...ys),y1=Math.max(...ys);
+  const years=[];for(let y=y0;y<=y1;y++)years.push(y);
+
+  // カテゴリ（実際に使われているものだけ）
+  const used=new Set(uniq.map(r=>r.cat));
+  if(byType){
+    // 件数の多い種類から並べる
+    const cnt=new Map();uniq.forEach(r=>cnt.set(r.cat,(cnt.get(r.cat)||0)+1));
+    COLS=[...cnt.entries()].sort((a,b)=>b[1]-a[1]).map(([c])=>c);
+  }else{
+    COLS=catNames.filter(c=>used.has(c));
+    if(used.has(UNCAT))COLS.push(UNCAT);
+  }
+  CAT_CC={};COLS.forEach((c,i)=>{CAT_CC[c]=CATPAL[i%CATPAL.length];});
+
+  const year_by_col={},coa={},stu={},kw={};
+  for(const y of years){
+    year_by_col[y]={};COLS.forEach(c=>{year_by_col[y][c]=0;});
+    coa[y]=[];stu[y]=[];kw[y]=[];
+  }
+  const cA={},cF={},cK={};
+  for(const y of years){cA[y]=new Map();cF[y]=new Map();cK[y]=new Map();}
+  for(const r of uniq){
+    year_by_col[r.y][r.cat]=(year_by_col[r.y][r.cat]||0)+1;
+    r.authors.forEach((a,idx)=>{
+      const k=keyOf(a);if(!k||ownerKeys.has(k))return;
+      cA[r.y].set(k,(cA[r.y].get(k)||0)+1);
+      if(idx===0)cF[r.y].set(k,(cF[r.y].get(k)||0)+1);   // 筆頭著者
+    });
+    (r.tp||[]).forEach(t=>cK[r.y].set(t,(cK[r.y].get(t)||0)+1));
+  }
+  const top5=m=>[...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5);
+  for(const y of years){
+    coa[y]=top5(cA[y]).map(([k,c])=>[canon.get(k)||k,c]);
+    stu[y]=top5(cF[y]).map(([k,c])=>[canon.get(k)||k,c]);
+    kw[y]=top5(cK[y]);
+  }
+
+  const papers=uniq.map(r=>{
+    const o={k:r.key,t:r.title,a:r.authors.map(disp2),y:r.y,c:r.cat,tp:r.tp||[],it:r.it};
+    for(const f of ['v','doi','u','pg','vl','is','pb'])if(r[f])o[f]=r[f];
+    // 欧文表記があれば引用スタイル用に持たせる
+    const ae=r.authors.map(a=>{const dn=disp2(a);return _cjk.test(dn)?'':dn;});
+    if(ae.some(Boolean))o.ae=ae;
+    const first=o.a[0]||'';
+    if(first&&!_cjk.test(first))o.ra=first.split(/\s+/)[0];
+    return o;
+  });
+
+  return {
+    years,col_order:COLS,total:uniq.length,year_by_col,
+    year_top_coauthors:coa,year_top_students:stu,year_top_keywords:kw,
+    papers,_owner:ownerName,
+  };
+}
+
+/* ── セットアップ画面 ───── */
+function setupMsg(t,isErr){
+  const el=document.getElementById('suMsg');
+  el.textContent=t||'';el.className='su-msg'+(isErr?' err':'');
+}
+function showSetup(){
+  document.getElementById('setup').style.display='';
+  document.getElementById('main').style.display='none';
+}
+function showMain(){
+  document.getElementById('setup').style.display='none';
+  document.getElementById('main').style.display='';
+}
+// 入力欄には数値ID・URL・API URLのいずれを貼ってもよい
+function parseLibInput(s){
+  s=(s||'').trim();
+  let m=s.match(/(users|groups)\/(\d+)/);
+  if(m)return{type:m[1],id:m[2]};
+  m=s.match(/^(\d{3,})$/);
+  if(m)return{type:'users',id:m[1]};
+  return null;
+}
+async function startLoad(lib,key,ownerName,zuser,aliases){
+  const base=`https://api.zotero.org/${lib.type}/${lib.id}`;
+  setupMsg('コレクションを取得中…');
+  const collections=await zPaged(base,'/collections',key);
+  setupMsg('文献を取得中…');
+  const items=await zPaged(base,'/items/top',key,(n,t)=>{
+    setupMsg(`文献を取得中… ${n}/${t}`);
+  });
+  setupMsg('集計中…');
+  D=analyze(items,collections,{ownerName,aliases});
+  CFG.ownerName=ownerName||D._owner||'';
+  CFG.zoteroUsername=zuser||'';
+  ZBASE=CFG.zoteroUsername?`https://www.zotero.org/${CFG.zoteroUsername}/items/`:'';
+  OWNER=CFG.ownerName?CFG.ownerName+' 研究業績データベース':'研究業績データベース';
+  SS_KEY=`${SS_MODEL}:${lib.type}${lib.id}:${D.papers.length}`;
+  showMain();boot();
+  // ?year=2016 や ?q=行動変容 で状態を指定できる（共有リンク用）
+  const q=new URLSearchParams(location.search);
+  const y=parseInt(q.get('year')||'',10);
+  if(y&&D.years.includes(y)){
+    const i=D.years.indexOf(y);
+    pin=i;hov=i;draw();tip(i);detail(i);
+    psYear=y;psTopic=null;psAuthor=null;renderPS();
+  }
+  if(q.get('q')){
+    document.getElementById('ssInput').value=q.get('q');
+    doSearch();
+  }
+}
+function wireSetup(){
+  const $=id=>document.getElementById(id);
+  const saved=(()=>{try{return JSON.parse(localStorage.getItem('zvSetup')||'null');}catch(e){return null;}})();
+  if(saved){$('suLib').value=saved.lib||'';$('suName').value=saved.name||'';$('suUser').value=saved.user||'';$('suAlias').value=saved.alias||'';}
+  function parseAliases(txt){
+    return (txt||'').split(/\n+/).map(l=>l.split(/\s*=\s*/))
+      .filter(x=>x.length===2&&x[0].trim()&&x[1].trim())
+      .map(x=>[x[0].trim(),x[1].trim()]);
+  }
+  async function go(lib,key,name,zuser,remember){
+    try{
+      $('suGo').disabled=true;$('suDemo').disabled=true;
+      await startLoad(lib,key,name,zuser,parseAliases($('suAlias').value));
+      if(remember)localStorage.setItem('zvSetup',JSON.stringify({lib:`${lib.type}/${lib.id}`,name,user:zuser,alias:$('suAlias').value}));
+    }catch(e){
+      console.error(e);setupMsg(e.message||String(e),true);
+      $('suGo').disabled=false;$('suDemo').disabled=false;
+    }
+  }
+  $('suGo').addEventListener('click',()=>{
+    const lib=parseLibInput($('suLib').value);
+    if(!lib){setupMsg('ユーザーIDを数値で入力してください（例: 15268781）。zotero.org/settings/keys で確認できます。',true);return;}
+    go(lib,$('suKey').value.trim(),$('suName').value.trim(),$('suUser').value.trim(),true);
+  });
+  $('suDemo').addEventListener('click',()=>{
+    $('suLib').value=DEMO.id;$('suName').value=DEMO.name;$('suUser').value=DEMO.user;
+    $('suAlias').value=DEMO.alias;
+    go({type:DEMO.type,id:DEMO.id},'',DEMO.name,DEMO.user,false);
+  });
+  $('suLib').addEventListener('keydown',e=>{if(e.key==='Enter')$('suGo').click();});
+  // ?lib=users/15268781&name=...&user=... で直接起動できる（デモURL用）
+  const q=new URLSearchParams(location.search);
+  if(q.get('lib')){
+    const lib=parseLibInput(q.get('lib'));
+    if(lib){
+      if(lib.id===DEMO.id)$('suAlias').value=DEMO.alias;
+      go(lib,'',q.get('name')||'',q.get('user')||'',false);return;
+    }
+  }
+  if(q.has('demo')){$('suDemo').click();}
+}
+
+const cv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const mc=document.getElementById('mc'),ctx=mc.getContext('2d');
+let bars=[],hov=null,pin=null;
+let psYear=null,psTopic=null,psAuthor=null,detailIdx=null;
+
+let ZBASE='';
+// 出力物のヘッダに使う名義
+let OWNER='研究業績データベース';
+function fmtAuth(p){return p.a&&p.a.length?p.a.slice(0,5).join(', ')+(p.a.length>5?` 他${p.a.length-5}名`:''):'—';}
+function filterByPerson(name){
+  ssHide();
+  psAuthor=(psAuthor===name)?null:name;
+  psTopic=null;
+  if(detailIdx!==null)detail(detailIdx);
+  renderPS();
+}
+function filterByTopic(nm){
+  ssHide();
+  psTopic=(psTopic===nm)?null:nm;
+  psAuthor=null;
+  if(detailIdx!==null)detail(detailIdx);
+  renderPS();
+}
+/* ── 意味検索（Transformers.js, ブラウザ内Embedding） ───── */
+const SS_MODEL='Xenova/multilingual-e5-small';
+const SS_DB='pubsearch-v1',SS_STORE='embeddings';
+let SS_KEY='';
+let ssEmbedder=null,ssTitleVecs=null,ssDim=384,ssBusy=false;
+function ssStatus(msg,isErr){const el=document.getElementById('ssStatus');el.textContent=msg||'';el.className='search-status'+(isErr?' err':'');}
+function ssHide(){document.getElementById('ss').style.display='none';document.getElementById('ssClearBtn').style.display='none';}
+function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open(SS_DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(SS_STORE);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+async function idbGet(key){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction(SS_STORE,'readonly'),rq=tx.objectStore(SS_STORE).get(key);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error);});}
+async function idbPut(key,val){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction(SS_STORE,'readwrite');tx.objectStore(SS_STORE).put(val,key);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);});}
+async function ssEnsureReady(){
+  if(ssTitleVecs)return;
+  ssStatus('モデルを読み込み中…（初回のみ、約120MB / 以後はキャッシュされます）');
+  const {pipeline,env}=await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0/dist/transformers.min.js');
+  env.allowLocalModels=false;
+  ssEmbedder=await pipeline('feature-extraction',SS_MODEL,{dtype:'q8',
+    progress_callback:p=>{if(p.status==='progress')ssStatus(`モデルを読み込み中… ${Math.round(p.progress||0)}%`);}
+  });
+  const papers=D.papers||[];
+  const cached=await idbGet(SS_KEY).catch(()=>null);
+  if(cached&&cached.count===papers.length){
+    ssTitleVecs=new Float32Array(cached.buf);ssDim=cached.dim;
+    ssStatus(`準備完了（${papers.length}件のタイトルをキャッシュから読込）`);
+    return;
+  }
+  ssStatus(`論文タイトルをベクトル化中… 0/${papers.length}`);
+  const BATCH=32,chunks=[];
+  for(let i=0;i<papers.length;i+=BATCH){
+    const texts=papers.slice(i,i+BATCH).map(p=>'passage: '+p.t);
+    const out=await ssEmbedder(texts,{pooling:'mean',normalize:true});
+    chunks.push(out.data);
+    ssDim=out.dims[out.dims.length-1];
+    ssStatus(`論文タイトルをベクトル化中… ${Math.min(i+BATCH,papers.length)}/${papers.length}`);
+  }
+  ssTitleVecs=new Float32Array(papers.length*ssDim);
+  let off=0;chunks.forEach(c=>{ssTitleVecs.set(c,off);off+=c.length;});
+  await idbPut(SS_KEY,{count:papers.length,dim:ssDim,buf:ssTitleVecs.buffer.slice(0)}).catch(()=>{});
+  ssStatus(`準備完了（${papers.length}件のタイトルをベクトル化しました）`);
+}
+async function doSearch(){
+  const q=document.getElementById('ssInput').value.trim();
+  if(!q||ssBusy)return;
+  ssBusy=true;
+  const btn=document.getElementById('ssBtn');btn.disabled=true;
+  psYear=null;psTopic=null;psAuthor=null;
+  document.getElementById('ps').style.display='none';
+  try{
+    await ssEnsureReady();
+    const qout=await ssEmbedder('query: '+q,{pooling:'mean',normalize:true});
+    const qv=qout.data;
+    const papers=D.papers||[];
+    const scored=papers.map((p,i)=>{
+      let dot=0;const base=i*ssDim;
+      for(let d=0;d<ssDim;d++)dot+=qv[d]*ssTitleVecs[base+d];
+      return{p,score:dot};
+    });
+    scored.sort((a,b)=>b.score-a.score);
+    renderSearchResults(q,scored.slice(0,30));
+    ssStatus('準備完了');
+  }catch(e){
+    console.error(e);
+    ssStatus('検索エンジンの読み込みに失敗しました。file://で直接開いている場合はローカルサーバー経由（例: python3 -m http.server）で開き直してください。',true);
+  }finally{
+    ssBusy=false;btn.disabled=false;
+  }
+}
+function renderSearchResults(q,top){
+  ssResults=top;ssQuery=q;
+  document.getElementById('ss-q').textContent='"'+q+'"';
+  document.getElementById('ss-cnt').textContent=top.length+'件';
+  const rows=top.map(({p,score})=>{
+    const auth=fmtAuth(p),pct=Math.max(0,Math.round(score*100));
+    const zl=ZBASE?`<a class="zlink" href="${ZBASE+p.k}" target="_blank" title="Zoteroで開く">Z↗</a>`:'';
+    return`<div class="sr-row"><span class="sr-score">${pct}%</span><span class="ptitle">${p.t}</span><span class="pmeta">${auth}・${p.y}・${p.c}</span>${zl}</div>`;
+  }).join('');
+  document.getElementById('srlist').innerHTML=rows||'<div class="nodata">該当する論文が見つかりませんでした</div>';
+  document.getElementById('ssClearBtn').style.display='';
+  const el=document.getElementById('ss');
+  el.style.display='block';
+  el.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function clearSearch(){
+  ssHide();
+  document.getElementById('ssInput').value='';
+  ssStatus('');
+}
+document.getElementById('ssBtn').addEventListener('click',doSearch);
+document.getElementById('ssInput').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch();});
+document.getElementById('ssClearBtn').addEventListener('click',clearSearch);
+/* ── エクスポート（Markdown / BibTeX） ───── */
+let ssResults=[],ssQuery='',psResults=[],psLabel='';
+const CITE_STYLES=[
+  {id:'ieee', label:'IEEE'},
+  {id:'acm',  label:'ACM'},
+  {id:'ipsj', label:'情報処理学会'},
+  {id:'ieice',label:'電子情報通信学会'},
+];
+let citeStyle=localStorage.getItem('pubCiteStyle')||'ieee';
+if(!CITE_STYLES.some(s=>s.id===citeStyle))citeStyle='ieee';
+function setCiteStyle(v){
+  citeStyle=v;
+  try{localStorage.setItem('pubCiteStyle',v);}catch(e){}
+  document.querySelectorAll('.exp-style').forEach(sel=>{sel.value=v;});
+}
+document.querySelectorAll('.exp-style').forEach(sel=>{
+  sel.innerHTML=CITE_STYLES.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
+  sel.value=citeStyle;
+});
+// BibTeX のエントリ種別（Zotero の itemType から対応付け）
+const BIBTYPE={journalArticle:'article',conferencePaper:'inproceedings',presentation:'inproceedings',
+  magazineArticle:'article',book:'book',bookSection:'incollection',patent:'patent',report:'techreport',thesis:'phdthesis'};
+// 掲載先を入れるフィールド名（@article は journal、それ以外は booktitle）
+const VENUEFIELD=t=>(t==='article'?'journal':(t==='book'||t==='techreport'||t==='phdthesis'?'series':'booktitle'));
+function bibEscape(s){return String(s||'').replace(/[\\]/g,'\\textbackslash ').replace(/([&%$#_])/g,'\\$1').replace(/[{}]/g,'').replace(/\s+/g,' ').trim();}
+function bibKey(p,used){
+  // 筆頭著者のローマ字姓（ra）を優先。無ければ ASCII 姓 → タイトル中の英単語 → Zotero キー
+  const ascii=s=>String(s||'').replace(/[^\x20-\x7E]/g,' ').trim();
+  let a=(p.ra||'').replace(/[^A-Za-z]/g,'');
+  if(!a)a=(ascii(p.a&&p.a[0]).split(/[\s,]+/).filter(Boolean)[0]||'').replace(/[^A-Za-z]/g,'');
+  if(!a){const w=ascii(p.t).split(/[^A-Za-z]+/).filter(x=>x.length>3);a=w[0]||'';}
+  let base=((a||p.k).toLowerCase()+(p.y||'')).replace(/[^a-z0-9]/g,'');
+  if(!base)base='ref';
+  let key=base,n=2;
+  while(used.has(key)){key=base+String.fromCharCode(95)+(n++);}
+  used.add(key);return key;
+}
+function toBibtex(list,header){
+  const used=new Set();
+  const body=list.map(p=>{
+    const type=BIBTYPE[p.it]||'misc',key=bibKey(p,used),F=[];
+    F.push(['author',(p.a||[]).join(' and ')]);
+    F.push(['title',p.t]);
+    F.push(['year',p.y]);
+    if(p.v)F.push([VENUEFIELD(type),p.v]);
+    if(p.vl)F.push(['volume',p.vl]);
+    if(p.is)F.push(['number',p.is]);
+    if(p.pg)F.push(['pages',p.pg]);
+    if(p.pb)F.push(['publisher',p.pb]);
+    if(p.doi)F.push(['doi',p.doi]);
+    if(p.u)F.push(['url',p.u]);
+    F.push(['note',p.c]);           // 業績区分（I.著書 / III.国際会議 など）
+    const fields=F.filter(([,v])=>v!==''&&v!=null)
+      .map(([k,v])=>`  ${k} = {${k==='title'?'{'+bibEscape(v)+'}':bibEscape(v)}}`).join(',\n');
+    return `@${type}{${key},\n${fields}\n}`;
+  }).join('\n\n');
+  return `% ${header}\n% ${OWNER}より出力\n\n${body}\n`;
+}
+/* ── 引用スタイル（IEEE / ACM / IPSJ / IEICE）───── */
+const hasCJK=s=>/[　-〿぀-ヿ一-鿿＀-￯]/.test(s||'');
+const DASH='–';  // en dash（ページ範囲用）
+// 保存形式は「姓 名」。{sur, given} に分解する
+function splitName(en){
+  const t=String(en||'').trim().split(/\s+/).filter(Boolean);
+  if(!t.length)return null;
+  if(t.length===1)return{sur:t[0],given:''};
+  return{sur:t[0],given:t.slice(1).join(' ')};
+}
+const initials=g=>String(g||'').split(/[\s\-]+/).filter(Boolean).map(w=>w[0].toUpperCase()+'.').join(' ');
+// 各スタイルの著者名表記。ローマ字が無い（日本語のみの）著者はそのまま日本語で出す
+function nameAs(p,i,mode){
+  const ja=(p.a||[])[i]||'', en=(p.ae||[])[i]||'';
+  const n=splitName(en);
+  if(!n||hasCJK(en)){
+    // ローマ字が無い場合：日本語スタイルはそのまま、欧文スタイルでも日本語表記で代替
+    return ja||en;
+  }
+  const ini=initials(n.given);
+  switch(mode){
+    case 'ieee':  return (ini?ini+' ':'')+n.sur;            // Y. Arakawa
+    case 'acm':   return (n.given?n.given+' ':'')+n.sur;     // Yutaka Arakawa
+    case 'ipsj':  return n.sur+(ini?', '+ini:'');            // Arakawa, Y.
+    case 'ieice': return (ini?ini+' ':'')+n.sur;             // Y. Arakawa
+  }
+  return ja||en;
+}
+function joinAuthors(p,mode){
+  const n=(p.a||[]).length;
+  let names;
+  // 和文誌スタイル×和文タイトルは、著者名も日本語で統一する（和英混在を防ぐ）
+  if((mode==='ipsj'||mode==='ieice')&&hasCJK(p.t)){
+    names=(p.a||[]).slice();
+  }else{
+    names=[];for(let i=0;i<n;i++)names.push(nameAs(p,i,mode));
+  }
+  names=names.filter(Boolean);
+  if(!names.length)return '';
+  const jp=names.every(hasCJK);
+  if(mode==='ieee'){
+    if(names.length>6)return names[0]+' et al.';
+    if(names.length===1)return names[0];
+    return names.slice(0,-1).join(', ')+(names.length>2?', and ':' and ')+names[names.length-1];
+  }
+  if(mode==='acm'){
+    if(names.length===1)return names[0];
+    return names.slice(0,-1).join(', ')+(names.length>2?', and ':' and ')+names[names.length-1];
+  }
+  if(mode==='ipsj'){
+    // 和文は「, 」、英文は "and" で連結
+    if(jp)return names.join(', ');
+    if(names.length===1)return names[0];
+    return names.slice(0,-1).join(', ')+' and '+names[names.length-1];
+  }
+  return names.join(', ');   // ieice
+}
+function pageStr(pg){return String(pg||'').replace(/\s*-{1,2}\s*/,DASH);}
+// 1件を指定スタイルの参考文献表記に整形する
+function formatCitation(p,mode){
+  // 題目末尾の句点は、後ろに付ける記号と重複するため落とす
+  const A=joinAuthors(p,mode), T=String(p.t||'').replace(/[.,、。]+$/,''), Y=p.y||'', V=p.v||'';
+  const isJournal=(p.it==='journalArticle'||p.it==='magazineArticle');
+  const pg=pageStr(p.pg), vol=p.vl||'', no=p.is||'', doi=p.doi||'';
+  const jp=hasCJK(T);
+  const bits=[];
+  if(mode==='ieee'){
+    let s=(A?A+', ':'')+`"${T},"`;
+    if(V)s+=isJournal?` ${V},`:` in Proc. ${V},`;
+    if(vol)s+=` vol. ${vol},`;
+    if(no)s+=` no. ${no},`;
+    // IEEE は会議録では「年→ページ」、雑誌では「ページ→年」の順
+    if(isJournal){
+      if(pg)s+=` pp. ${pg},`;
+      s+=` ${Y}.`;
+    }else{
+      s+=` ${Y},`;
+      if(pg)s+=` pp. ${pg},`;
+      s=s.replace(/,$/,'.');
+    }
+    if(doi)s+=` doi: ${doi}.`;
+    return s.replace(/,\s*\./g,'.');
+  }
+  if(mode==='acm'){
+    let s=(A?A+'. ':'')+`${Y}. ${T}.`;
+    if(V)s+=isJournal?` ${V}`:` In Proceedings of ${V}`;
+    if(isJournal){
+      if(vol)s+=` ${vol}`+(no?`, ${no}`:'');
+      s+=` (${Y})`;                       // 巻号の後に年（ACM は雑誌のみ）
+      if(pg)s+=`, ${pg}`;
+    }else if(pg){
+      s+=`, ${pg}`;
+    }
+    s+='.';
+    if(doi)s+=` https://doi.org/${doi}`;
+    return s.replace(/\s+/g,' ').replace(/\.\s*\./g,'.');
+  }
+  if(mode==='ipsj'){
+    // 和文: 著者: 題目, 誌名, Vol.x, No.y, pp.a–b (年).
+    let s=(A?A+': ':'')+T+',';
+    if(V)s+=` ${V},`;
+    if(vol)s+=` Vol.${vol},`;
+    if(no)s+=` No.${no},`;
+    if(pg)s+=` pp.${pg}`;
+    s=s.replace(/,$/,'');
+    s+=` (${Y}).`;
+    return s.replace(/,\s*\(/,' (');
+  }
+  // ieice: 著者, "題目," 誌名, vol.x, no.y, pp.a–b, 年.
+  let s=(A?A+', ':'')+(jp?`"${T}," `:`"${T}," `);
+  if(V)s+=`${V}, `;
+  if(vol)s+=`vol.${vol}, `;
+  if(no)s+=`no.${no}, `;
+  if(pg)s+=`pp.${pg}, `;
+  s+=`${Y}.`;
+  return s.replace(/,\s*,/g,',');
+}
+// 参考文献リスト（Word にそのまま貼れるプレーンテキスト）
+function toCitationList(list,header,scores,mode){
+  const lines=list.map((p,i)=>{
+    const sc=scores&&scores[i]!=null?`  [類似度 ${scores[i]}%]`:'';
+    return `[${i+1}] ${formatCitation(p,mode)}${sc}`;
+  }).join('\n\n');
+  const label=(CITE_STYLES.find(s=>s.id===mode)||{}).label||mode;
+  return `${header}\n${OWNER} / ${list.length}件 / ${label} スタイル\n\n${lines}\n`;
+}
+function download(name,text,mime){
+  const b=new Blob([text],{type:mime+';charset=utf-8'}),u=URL.createObjectURL(b);
+  const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();
+  document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(u),1000);
+}
+function flash(btn,msg,isErr){
+  if(!btn)return;const old=btn.dataset.label||btn.textContent;
+  btn.dataset.label=old;
+  btn.textContent=msg;btn.classList.add(isErr?'err':'done');
+  setTimeout(()=>{btn.textContent=old;btn.classList.remove('done','err');},1600);
+}
+function exportResults(kind,btn,src){
+  let list,scores=null,header,slug;
+  if(src==='ss'){
+    if(!ssResults.length){flash(btn,'結果なし',true);return;}
+    list=ssResults.map(r=>r.p);
+    scores=ssResults.map(r=>Math.max(0,Math.round(r.score*100)));
+    header=`関連論文リスト — 意味検索「${ssQuery}」`;slug=ssQuery;
+  }else{
+    if(!psResults.length){flash(btn,'結果なし',true);return;}
+    list=psResults;header=`論文リスト — ${psLabel}`;slug=psLabel;
+  }
+  slug=(slug||'export').replace(/[\\\/:*?"<>|\s]+/g,'_').slice(0,40);
+  const stamp=new Date().toISOString().slice(0,10);
+  if(kind==='bib'){
+    download(`pubs_${slug}_${stamp}.bib`,toBibtex(list,header),'text/plain');
+    flash(btn,'保存しました');
+  }else if(kind==='md'){
+    download(`pubs_${slug}_${citeStyle}_${stamp}.txt`,toCitationList(list,header,scores,citeStyle),'text/plain');
+    flash(btn,'保存しました');
+  }else{
+    const text=toCitationList(list,header,scores,citeStyle);
+    const ok=()=>flash(btn,'コピーしました');
+    if(navigator.clipboard&&window.isSecureContext){
+      navigator.clipboard.writeText(text).then(ok,()=>fallbackCopy(text,btn));
+    }else fallbackCopy(text,btn);
+  }
+}
+function fallbackCopy(text,btn){
+  // file:// など clipboard API が使えない環境向け
+  const ta=document.createElement('textarea');ta.value=text;
+  ta.style.cssText='position:fixed;top:-1000px;opacity:0';
+  document.body.appendChild(ta);ta.select();
+  let ok=false;try{ok=document.execCommand('copy');}catch(e){}
+  document.body.removeChild(ta);
+  flash(btn,ok?'コピーしました':'コピー失敗',!ok);
+}
+function renderPS(){
+  const el=document.getElementById('ps'),pl=document.getElementById('plist');
+  let ps=D.papers||[];
+  if(psYear!==null)ps=ps.filter(p=>p.y===psYear);
+  if(psTopic!==null)ps=ps.filter(p=>p.tp&&p.tp.includes(psTopic));
+  if(psAuthor!==null)ps=ps.filter(p=>p.a&&p.a.includes(psAuthor));
+  const yrEl=document.getElementById('ps-yr'),tpEl=document.getElementById('ps-tp'),cntEl=document.getElementById('ps-cnt');
+  yrEl.textContent=psYear!==null?psYear+'年':'';
+  const filterLabel=psAuthor||psTopic||null;
+  const filterColor=psAuthor?'#7B9EC4':(psTopic?(TM[psTopic]||{c:'#888'}).c:'#888');
+  if(filterLabel){tpEl.textContent=filterLabel;tpEl.style.display='';tpEl.style.background=filterColor;}
+  else{tpEl.style.display='none';}
+  cntEl.textContent=ps.length+'件';
+  // エクスポート用に現在の絞り込み結果を保持
+  psResults=ps;
+  psLabel=[psYear!==null?psYear+'年':'',filterLabel||''].filter(Boolean).join(' × ')||'全件';
+  // カテゴリ別グループ表示
+  const grouped={};COLS.forEach(c=>{grouped[c]=[];});
+  ps.forEach(p=>{if(grouped[p.c])grouped[p.c].push(p);});
+  pl.innerHTML=COLS.filter(c=>grouped[c].length>0).map(c=>{
+    const cc=CAT_CC[c]||'#888';
+    const rows=grouped[c].map(p=>{
+      const auth=fmtAuth(p);
+      const zl=ZBASE?`<a class="zlink" href="${ZBASE+p.k}" target="_blank" title="Zoteroで開く">Z↗</a>`:'';
+      return`<div class="paper-row"><span class="ptitle">${p.t}</span><span class="pmeta">${auth}・${p.y}</span>${zl}</div>`;
+    }).join('');
+    return`<div class="cat-block"><div class="cat-hdr"><span class="cat-dot" style="background:${cc}"></span><span class="cat-name">${c}</span><span class="cat-cnt">${grouped[c].length}件</span></div><div>${rows}</div></div>`;
+  }).join('');
+  el.style.display='block';
+}
+function clearPS(){
+  ssHide();
+  psYear=null;psTopic=null;psAuthor=null;
+  document.getElementById('ps').style.display='none';
+  if(detailIdx!==null)detail(detailIdx);
+}
+function gc(i){return CATPAL[i%CATPAL.length];}
+function draw(){
+  const dpr=window.devicePixelRatio||1,W=mc.parentElement.clientWidth;
+  // 画面が広いほどグラフも縦に伸ばし、横長で潰れないようにする
+  const H=Math.max(260,Math.min(440,Math.round(W*0.26)));
+  mc.width=W*dpr;mc.height=H*dpr;mc.style.width=W+'px';mc.style.height=H+'px';ctx.scale(dpr,dpr);
+  const N=D.years.length,PL=42,PR=8,PT=16,PB=34,cW=W-PL-PR,cH=H-PT-PB;
+  const mx=Math.max(...D.years.map(y=>{const d=D.year_by_col[y]||{};return COLS.reduce((s,c)=>s+(d[c]||0),0);}));
+  const gap=Math.max(2,cW/N*.08),bw=(cW-gap*(N-1))/N;
+  bars=[];ctx.clearRect(0,0,W,H);
+  [25,50,75,100].forEach(v=>{
+    if(v>mx+5)return;
+    const y=PT+cH-(v/(mx*1.05))*cH;
+    ctx.strokeStyle=cv('--grid');ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(PL,y);ctx.lineTo(W-PR,y);ctx.stroke();
+    ctx.fillStyle=cv('--text3');ctx.font=`13px ${cv('--mono')||'monospace'}`;ctx.textAlign='right';ctx.fillText(v,PL-6,y+4);
+  });
+  D.years.forEach((yr,i)=>{
+    const x=PL+i*(bw+gap),d=D.year_by_col[yr]||{},tot=COLS.reduce((s,c)=>s+(d[c]||0),0);
+    let sy=PT+cH;const isH=hov===i,isP=pin===i;
+    if(isH||isP){ctx.fillStyle=isP?cv('--sel-hl'):cv('--hover-hl');ctx.fillRect(x-2,PT-4,bw+4,cH+4);}
+    COLS.forEach((col,ci)=>{
+      const v=d[col]||0;if(!v)return;
+      const bh=(v/(mx*1.05))*cH;
+      ctx.fillStyle=gc(ci);ctx.globalAlpha=(isH||isP)?1:.88;
+      ctx.beginPath();
+      if(ctx.roundRect)ctx.roundRect(x,sy-bh,bw,bh,[ci===0?2:0,ci===0?2:0,0,0]);
+      else ctx.rect(x,sy-bh,bw,bh);
+      ctx.fill();ctx.globalAlpha=1;sy-=bh;
+    });
+    bars.push({x,w:bw,yr,i,tot});
+    ctx.fillStyle=cv('--text3');ctx.font=`13px ${cv('--mono')||'monospace'}`;ctx.textAlign='center';
+    ctx.fillText(String(yr).slice(2),x+bw/2,H-10);
+  });
+}
+function tip(i){
+  const yr=D.years[i],d=D.year_by_col[yr]||{},tot=COLS.reduce((s,c)=>s+(d[c]||0),0);
+  document.getElementById('tt-yr').textContent=yr;document.getElementById('tt-tot').textContent=tot;
+  document.getElementById('tt-rows').innerHTML=COLS.map((col,ci)=>{
+    const v=d[col]||0;return v?`<div class="yt-row"><span><span class="yt-dot" style="background:${gc(ci)}"></span>${col}</span><span>${v}</span></div>`:'';
+  }).join('');
+  const tt=document.getElementById('tt');
+  if(i>=D.years.length/2){tt.style.left='0';tt.style.right='';}
+  else{tt.style.left='';tt.style.right='0';}
+  tt.classList.add('visible');
+}
+function hideTip(){document.getElementById('tt').classList.remove('visible');}
+function detail(i){
+  detailIdx=i;
+  const yr=D.years[i],d=D.year_by_col[yr]||{},tot=COLS.reduce((s,c)=>s+(d[c]||0),0);
+  document.getElementById('dyr').textContent=yr;document.getElementById('dtot').textContent=tot+'件';
+  const mkList=(items,el,empty)=>{
+    el.innerHTML=items&&items.length?
+      items.map(([n,c])=>`<div class="prow${psAuthor===n?' active':''}" onclick='filterByPerson(${JSON.stringify(n)})'><span class="pname">${n}</span><span class="pcnt">${c}件</span></div>`).join(''):
+      `<div class="nodata">${empty}</div>`;
+  };
+  mkList(D.year_top_coauthors[yr],document.getElementById('coa-list'),'データなし');
+  mkList(D.year_top_students[yr],document.getElementById('stu-list'),'データなし');
+  const kws=D.year_top_keywords[yr]||[],kwEl=document.getElementById('kw-list');
+  if(!kws.length){kwEl.innerHTML='<div class="nodata">データなし</div>';}
+  else{const mk=kws[0][1]||1;kwEl.innerHTML=kws.map(([nm,cnt])=>{const m=TM[nm]||{c:'#888'};return`<div class="kwitem${psTopic===nm?' active':''}" onclick='filterByTopic(${JSON.stringify(nm)})'><div class="kwname">${nm}</div><div class="kwbar-wrap"><div class="kwbar" style="width:${Math.round(cnt/mk*100)}%;background:${m.c}"></div></div><div class="kwcnt">${cnt}</div></div>`}).join('');}
+  document.querySelectorAll('.topic-col').forEach((el,j)=>el.classList.toggle('selected',j===i));
+}
+function buildStrip(){
+  const g=document.getElementById('tgrid');g.innerHTML='';
+  D.years.forEach((yr,i)=>{
+    const col=document.createElement('div');col.className='topic-col';
+    const kws=D.year_top_keywords[yr]||[];
+    for(let j=0;j<3;j++){
+      const ch=document.createElement('div');
+      if(j<kws.length){
+        const[nm]=kws[j];const m=TM[nm]||{c:'#888',s:nm.slice(0,3)};
+        ch.className='topic-chip';ch.style.background=m.c;ch.title=nm;ch.textContent=m.s;
+      } else{ch.className='topic-chip empty';ch.textContent='·';}
+      col.appendChild(ch);
+    }
+    const lb=document.createElement('div');lb.className='topic-yr';lb.textContent=yr%2===0?String(yr).slice(2):'';col.appendChild(lb);
+    col.addEventListener('mouseenter',()=>{if(pin===null){hov=i;draw();tip(i);detail(i);}});
+    col.addEventListener('click',()=>{
+      pin=(pin===i)?null:i;hov=i;draw();tip(i);detail(i);
+      document.getElementById('dhint').textContent=pin!==null?'クリックで固定解除':'バーまたはトピックをクリックで固定';
+      ssHide();psYear=D.years[i];psTopic=null;psAuthor=null;renderPS();
+    });
+    g.appendChild(col);
+  });
+}
+const cw=document.getElementById('cwrap');
+cw.addEventListener('mousemove',e=>{
+  if(pin!==null)return;
+  const r=mc.getBoundingClientRect(),mx=e.clientX-r.left;
+  let f=null;bars.forEach(b=>{if(mx>=b.x-2&&mx<=b.x+b.w+2)f=b.i;});
+  if(f!==null&&f!==hov){hov=f;draw();tip(f);detail(f);}
+  else if(f===null&&hov!==null){hov=null;draw();hideTip();}
+});
+cw.addEventListener('mouseleave',()=>{if(pin!==null)return;hov=null;draw();hideTip();});
+cw.addEventListener('click',e=>{
+  const r=mc.getBoundingClientRect(),mx=e.clientX-r.left;
+  let f=null;bars.forEach(b=>{if(mx>=b.x-2&&mx<=b.x+b.w+2)f=b.i;});
+  if(f!==null){pin=(pin===f)?null:f;hov=f;draw();tip(f);detail(f);
+    document.getElementById('dhint').textContent=pin!==null?'クリックで固定解除':'バーまたはトピックをクリックで固定';
+    ssHide();psYear=D.years[f];psTopic=null;psAuthor=null;renderPS();}
+});
+let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{draw();buildStrip();},80);});
+// window.resize が発火しない状況（初回描画時に幅0、ペインの表示切替など）でも
+// コンテナ幅の変化を検知して再描画する
+if(window.ResizeObserver){
+  let lastW=0;
+  new ResizeObserver(()=>{
+    const w=cw.clientWidth;
+    if(w&&w!==lastW){lastW=w;draw();buildStrip();}
+  }).observe(cw);
+}
+function boot(){
+document.getElementById('legend').innerHTML=COLS.map((c,i)=>
+  `<div class="legend-item"><span class="legend-swatch" style="background:${CATPAL[i%CATPAL.length]}"></span>${c}</div>`).join('');
+// ヘッダの総件数・年範囲はデータから反映する
+const _t=[CFG.ownerName,CFG.subtitle].filter(Boolean).join(' ─ ');
+document.getElementById('hdrTitle').textContent=_t;
+document.getElementById('hdrEyebrow').textContent=CFG.eyebrow||'';
+document.title=`${_t} (${D.years[0]}–${D.years[D.years.length-1]})`;
+document.getElementById('hdrCount').textContent=(D.total||0).toLocaleString('en-US');
+document.getElementById('hdrRange').textContent=`件 / ${D.years[0]}–${D.years[D.years.length-1]}`;
+buildStrip();draw();
+const _tot=y=>COLS.reduce((s,c)=>s+((D.year_by_col[y]||{})[c]||0),0);
+let pi=0;D.years.forEach((y,i)=>{if(_tot(y)>_tot(D.years[pi]))pi=i;});
+hov=pi;detail(pi);setTimeout(()=>{draw();tip(pi);},100);
+}
+wireSetup();
+</script>

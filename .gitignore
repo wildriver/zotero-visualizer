@@ -1,0 +1,14 @@
+# 中間データ（index.html は Zotero API から直接読むため不要。
+# analyze_viz5.py を使う場合は fetch_zotero.py で各自生成する）
+viz_data.json
+viz_final5.json
+
+# 個人の作業記録・復元用データ（公開する内容ではない）
+zotero_backup/
+gap_report.md
+incomplete_items.md
+main.tex
+
+# ローカル設定
+.claude/
+.DS_Store
