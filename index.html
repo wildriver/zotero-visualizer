@@ -573,6 +573,34 @@ function analyze(items,collections,opts){
     tokOf.set(k,t);
   }
   const useCount=k=>{let n=0;for(const v of (rawForms.get(k)||new Map()).values())n+=v;return n;};
+
+  // 「Yasumoto K.」と「Yasumoto Keiichi」を同一人物とみなす。
+  // 姓が一致し、片方の名がイニシャルで、その頭文字がもう片方の名と一致する場合。
+  // 同じ姓・同じ頭文字の別人がいるときは、件数が突出しているものだけに寄せる。
+  const surOf=k=>{
+    const t=[...(tokOf.get(k)||[])];
+    return t.length>1?t.filter(x=>x.length>1).sort()[0]||null:null;
+  };
+  const isIni=x=>/^[a-z]\.?$/.test(x);
+  for(const [k,tk] of tokOf){
+    const toks=[...tk];
+    if(toks.length<2)continue;
+    const ini=toks.filter(isIni);
+    if(!ini.length)continue;                            // イニシャルを含まない形は対象外
+    const sur=toks.filter(x=>x.length>1&&!isIni(x));
+    if(sur.length!==1)continue;
+    const letter=ini[0][0];
+    const cands=[...tokOf.entries()].filter(([k2,t2])=>{
+      if(k2===k)return false;
+      const o=[...t2];
+      if(o.some(isIni))return false;                    // 相手も略記なら判定できない
+      if(!o.includes(sur[0]))return false;              // 姓が一致すること
+      return o.some(x=>x!==sur[0]&&x[0]===letter);      // 名の頭文字が一致すること
+    }).sort((a,b)=>useCount(b[0])-useCount(a[0]));
+    if(!cands.length)continue;
+    const top=useCount(cands[0][0]), second=cands.length>1?useCount(cands[1][0]):0;
+    if(cands.length===1||top>=second*3)aliasMap.set(k,cands[0][0]);
+  }
   for(const [k,tk] of tokOf){
     if(tk.size!==1||k.length<3)continue;
     const only=[...tk][0];
