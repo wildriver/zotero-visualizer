@@ -165,6 +165,7 @@ header h1{font-size:26px;font-weight:600;letter-spacing:.01em;}
 .al-sel{font-family:var(--sans);font-size:13.5px;color:var(--text);background:var(--surface);
   border:1px solid var(--border);border-radius:6px;padding:4px 8px;max-width:340px;width:100%;}
 .al-sel:focus{border-color:var(--c2);outline:none;}
+.al-sel.bad{border-color:var(--c5);}
 .al-foot{display:flex;align-items:center;gap:12px;padding:12px 0 4px;flex-wrap:wrap;}
 .al-empty{padding:16px 0;font-size:14px;color:var(--text3);}
 .al-open{font-family:var(--sans);font-size:12.5px;color:var(--text2);background:transparent;
@@ -882,6 +883,92 @@ function collectNameCandidates(){
   return {ja,en,disp,papers};
 }
 
+// ── 漢字表記からローマ字を起こして、欧文表記の候補を絞る ─────
+// 埋め込みモデルは固有名詞の同一性を測れない（実測で 100 人中の1位的中 0/16）。
+// 一方 kuroshiro + kuromoji で読みを起こして綴りを比べると 14/16 まで上がる。
+// 辞書が 17MB あるので、このボタンが押されたときだけ読み込む。
+let ALIAS_GUESS=null, _kuro=null, ALIAS_VALID=new Set();
+
+// 打ち終わって（フォーカスが外れて）から判定する。
+// 入力の一文字ごとに赤くすると、まだ打ちかけなだけなのに間違い扱いに見える
+function alMark(el){
+  const v=el.value.trim().toLowerCase();
+  el.classList.toggle('bad', !!v && !ALIAS_VALID.has(v));
+}
+
+async function loadKuroshiro(){
+  if(_kuro)return _kuro;
+  const add=src=>new Promise((ok,ng)=>{
+    const s=document.createElement('script');s.src=src;s.onload=()=>ok();
+    s.onerror=()=>ng(new Error(src));document.head.appendChild(s);
+  });
+  await add('https://cdn.jsdelivr.net/npm/kuroshiro@1.2.0/dist/kuroshiro.min.js');
+  await add('https://cdn.jsdelivr.net/npm/kuroshiro-analyzer-kuromoji@1.1.0/dist/kuroshiro-analyzer-kuromoji.min.js');
+  const K=window.Kuroshiro.default||window.Kuroshiro;
+  const A=window.KuromojiAnalyzer.default||window.KuromojiAnalyzer;
+  const k=new K();
+  await k.init(new A({dictPath:'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/'}));
+  return _kuro=k;
+}
+
+// 表示名を姓と名に割る。和名は「姓 名」、欧文は enFL 済みなので「名 姓」。
+function splitDisp(n){
+  const t=String(n||'').trim().split(/[\s　]+/).filter(Boolean);
+  if(!t.length)return{sur:'',giv:''};
+  if(t.length===1)return{sur:t[0],giv:''};
+  return _cjk.test(n)?{sur:t[0],giv:t.slice(1).join('')}
+                     :{sur:t[t.length-1],giv:t.slice(0,-1).join('')};
+}
+const _lat=s=>String(s||'').toLowerCase().replace(/[^a-z]/g,'');
+// 2-gram の Dice 係数。綴りの揺れ（shigemi / shigerumi）を拾うため
+function dice(a,b){
+  if(!a||!b)return 0;
+  if(a===b)return 1;
+  const g=s=>{const o=[];for(let i=0;i<s.length-1;i++)o.push(s.slice(i,i+2));return o;};
+  const A=g(a),B=g(b);
+  if(!A.length||!B.length)return 0;
+  const m=new Map();for(const x of A)m.set(x,(m.get(x)||0)+1);
+  let h=0;for(const x of B)if(m.get(x)>0){h++;m.set(x,m.get(x)-1);}
+  return 2*h/(A.length+B.length);
+}
+
+async function guessAliases(){
+  const note=document.getElementById('alGuessMsg');
+  const say=t=>{if(note)note.textContent=t;};
+  let k;
+  try{ say('辞書を読み込んでいます…（初回のみ約17MB）'); k=await loadKuroshiro(); }
+  catch(e){ say('辞書を読み込めませんでした。手動で選んでください。'); return; }
+  say('読みを起こしています…');
+  const {ja,en,disp,papers}=collectNameCandidates();
+  const MIN=3, enMain=en.filter(([,c])=>c>=MIN);
+  const enR=new Map(enMain.map(([k2])=>{
+    const s=splitDisp(disp.get(k2));return [k2,{sur:_lat(s.sur),giv:_lat(s.giv)}];
+  }));
+  const rom=async s=>s?_lat(await k.convert(s,{to:'romaji',romajiSystem:'hepburn'})):'';
+  const out=new Map();
+  for(const [kj,c] of ja){
+    if(c<MIN)continue;
+    const s=splitDisp(disp.get(kj));
+    const rs=await rom(s.sur), rg=await rom(s.giv), rw=await rom(s.sur+' '+s.giv);
+    const mine=papers.get(kj);
+    const cand=[];
+    for(const [k2] of enMain){
+      let clash=false;
+      for(const i of papers.get(k2))if(mine.has(i)){clash=true;break;}
+      if(clash)continue;                                   // 同じ論文に出るなら別人
+      const a=enR.get(k2);
+      // 姓は形態素解析が姓名を切り違えることがあるので、通し読みの頭とも比べる
+      const sSur=Math.max(dice(rs,a.sur),dice(rw.slice(0,a.sur.length+2),a.sur));
+      cand.push([k2,0.65*sSur+0.35*dice(rg,a.giv)]);
+    }
+    cand.sort((x,y)=>y[1]-x[1]);
+    out.set(kj,cand);
+  }
+  ALIAS_GUESS=out;
+  say('');
+  openAliasPanel();
+}
+
 function openAliasPanel(){
   const {ja,en,disp,papers}=collectNameCandidates();
   const panel=document.getElementById('aliasPanel');
@@ -902,30 +989,58 @@ function openAliasPanel(){
       return true;
     });
   }).slice(0,30);
+  // 自動候補を出したときは、確からしい順に並べ替えて先頭を選んでおく。
+  // 1位が正しくても2位と僅差なら選ばない。読みを外した外国語の漢字名を
+  // 勝手に確定させないための歯止め（実測では崔・柏本がここで落ちて誤りゼロ）。
+  const SURE=0.55, GAP=0.15;
+  let auto=0, rowId=0;
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  // 入力された表記が実在するかを画面上で示す。存在しない綴りは集計時に無視される
+  ALIAS_VALID=new Set(enMain.map(([k2])=>disp.get(k2).toLowerCase()));
   const rows=target.map(([k,c])=>{
     // その和名と同じ論文に出ない欧文名だけを候補にする
     const mine=papers.get(k);
-    const opts=enMain.filter(([k2])=>{
+    let opts=enMain.filter(([k2])=>{
       const other=papers.get(k2);
       for(const i of other)if(mine.has(i))return false;
       return true;
     });
-    const cur=already.get(k)||'';
-    const o=['<option value="">（対応なし）</option>']
-      .concat(opts.map(([k2,c2])=>{
-        const n=disp.get(k2);
-        return `<option value="${n.replace(/"/g,'&quot;')}"${n===cur?' selected':''}>${n}（${c2}件）</option>`;
-      })).join('');
+    const g=ALIAS_GUESS&&ALIAS_GUESS.get(k);
+    let pick='';
+    if(g&&g.length){
+      const sc=new Map(g);
+      opts=opts.slice().sort((a,b)=>(sc.get(b[0])||0)-(sc.get(a[0])||0));
+      const top=g[0],second=g[1];
+      if(top[1]>=SURE&&(!second||top[1]-second[1]>=GAP)){pick=disp.get(top[0]);auto++;}
+    }
+    const cur=already.get(k)||pick;
+    // プルダウンから目で探すのは辛いので、datalist にしてローマ字で絞り込めるようにする。
+    // 候補一覧は残るため、綴りがうろ覚えでも先頭を数文字打てば出てくる。
+    const id='alDL'+(rowId++);
+    const o=opts.map(([k2,c2])=>{
+      const n=disp.get(k2);
+      const s=ALIAS_GUESS&&ALIAS_GUESS.get(k)?(ALIAS_GUESS.get(k).find(x=>x[0]===k2)||[,0])[1]:null;
+      const tag=s!==null&&s>0?` ★${Math.round(s*100)}`:'';
+      return `<option value="${esc(n)}" label="${esc(n+'（'+c2+'件）'+tag)}"></option>`;
+    }).join('');
     return `<tr><td class="al-ja">${disp.get(k)}<span class="al-c">${c}件</span></td>`+
-           `<td class="al-eq">=</td><td><select class="al-sel" data-ja="${disp.get(k).replace(/"/g,'&quot;')}">${o}</select></td></tr>`;
+           `<td class="al-eq">=</td><td><input class="al-sel" list="${id}" autocomplete="off"`+
+           ` placeholder="ローマ字で絞り込む（例: yasu）" data-ja="${esc(disp.get(k))}"`+
+           ` value="${esc(cur)}" onchange="alMark(this)" onblur="alMark(this)"`+
+           ` oninput="this.classList.remove('bad')"><datalist id="${id}">${o}</datalist></td></tr>`;
   }).join('');
   const done=[...already.values()].filter(Boolean).length;
+  const guessNote=ALIAS_GUESS
+    ? `漢字の読みから ${auto} 名を選んでおきました。★は確からしさです。確認してから下のボタンを押してください`
+    : `<button class="al-open" onclick="guessAliases()">漢字から候補を出す</button>
+       <span id="alGuessMsg" class="al-note"></span>`;
   panel.innerHTML=
     `<div class="al-head">氏名の対応づけ
        <span class="al-note">全期間に対して一度だけ設定すれば、どの年を見ても反映されます。
          別人として数えられている主な共著者 ${target.length} 名（設定済み ${done} 名）。多い順です</span>
        <button class="al-close" onclick="document.getElementById('aliasPanel').style.display='none'">✕</button>
      </div>
+     <div class="al-foot">${guessNote}</div>
      <div class="al-body"><table class="al-tbl">${rows}</table></div>
      <div class="al-foot">
        <button class="su-btn" onclick="applyAliasPanel()">この対応で集計し直す</button>
@@ -936,10 +1051,16 @@ function openAliasPanel(){
 }
 
 function applyAliasPanel(){
-  const pairs=[];
+  const pairs=[]; let dropped=0;
   document.querySelectorAll('#aliasPanel .al-sel').forEach(sel=>{
-    if(sel.value)pairs.push([sel.dataset.ja,sel.value]);
+    const v=sel.value.trim();
+    if(!v)return;
+    // 手入力なので、実在する表記に揃えてから使う（大文字小文字の揺れを吸収）
+    const hit=[...ALIAS_VALID].includes(v.toLowerCase());
+    if(!hit){dropped++;return;}
+    pairs.push([sel.dataset.ja,v]);
   });
+  if(dropped)alert(`${dropped} 件は該当する欧文表記が見つからないため、対応づけから外しました。`);
   ALIAS_PAIRS=pairs;
   try{
     const saved=JSON.parse(localStorage.getItem('zvSetup')||'{}');
