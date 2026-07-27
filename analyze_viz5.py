@@ -10,6 +10,14 @@ COL_ORDER = ["I.著書","II.学術論文","III.国際会議","IV.国内会議・
 
 def norm(n): return unicodedata.normalize("NFKC", n or "").strip()
 def normkey(n): return re.sub(r"[\s　\-\.\・]", "", norm(n)).lower()
+
+def en_first_last(n):
+    """画面表示用。欧文名だけ「名 姓」にする（Arakawa Yutaka → Yutaka Arakawa）。
+    引用スタイル用の ae は splitName が先頭を姓として読むので、そちらには使わない。"""
+    if not n or has_cjk(n): return n
+    t = n.split()
+    return n if len(t) < 2 else " ".join(t[1:]) + " " + t[0]
+
 def has_cjk(s): return bool(re.search(r"[　-鿿豈-﫿]", s))
 
 def strip_num(t):
@@ -220,19 +228,20 @@ PERSONS = [
     {"ja":"福田 修之",   "en":"Fukuda Shuichi",      "keys":["福田修之","fukudashuichi"],                          "faculty":False},
     {"ja":"谷口 倫一郎", "en":"Taniguchi Rinichiro", "keys":["谷口倫一郎","taniguchirinichiro"],                   "faculty":False},
     {"ja":"藤本 隆晟",   "en":"Fujimoto Ryusei",     "keys":["藤本隆晟","fujimotoryusei"],                         "faculty":False},
-    {"ja":"梅津 雅吉",   "en":"Umetsu Yoshinori",    "keys":["梅津雅吉","umetsuyoshinori"],                        "faculty":False},
+    {"ja":"梅津 吉雅",   "en":"Umetsu Yoshimasa",    "keys":["梅津吉雅","梅津雅吉","umetsuyoshimasa","umetsuyoshinori"],"faculty":False},
     {"ja":"和田 遥香",   "en":"Wada Haruka",         "keys":["和田遥香","wadaharuka"],                             "faculty":False},
     {"ja":"佐々木 渉",   "en":"Sasaki Wataru",       "keys":["佐々木渉","sasakiwataru"],                           "faculty":False},
     {"ja":"高田 将志",   "en":"Takata Masashi",      "keys":["高田将志","takatamasashi"],                          "faculty":False},
     {"ja":"辻 智博",     "en":"Tsuji Tomohiro",      "keys":["辻智博","tsujitomohiro"],                            "faculty":False},
     {"ja":"落合 桂一",   "en":"Ochiai Keiichi",      "keys":["落合桂一","ochiaikeiichi"],                          "faculty":False},
     {"ja":"大滝 亨",     "en":"Otaki Toru",          "keys":["大滝亨","otakitoru"],                                "faculty":False},
-    {"ja":"山田 暁",     "en":"Yamada Akira",        "keys":["山田暁","yamadaakira"],                              "faculty":False},
+    {"ja":"山田 曉",     "en":"Yamada Akira",        "keys":["山田曉","山田暁","yamadaakira"],                     "faculty":False},
     {"ja":"白井 拓也",   "en":"Shirai Takuya",       "keys":["白井拓也","shiraitakuya"],                           "faculty":True},
     {"ja":"金子 邦彦",   "en":"Kaneko Kunihiko",     "keys":["金子邦彦","kanekokunihiko"],                         "faculty":False},
     # 外国人研究者 — 表記揺れ統合
     {"ja":"Trono Edgar Marko","en":"Trono Edgar Marko","keys":["tronoedgarmarko","tronomarko","markotronoedgar"],"faculty":False},
-    {"ja":"Akpa Elder",       "en":"Akpa Elder",       "keys":["akpaelder","hippocrateakpaakproelder"],          "faculty":False},
+    {"ja":"Akpa Akpro Elder Hippocrate","en":"Akpa Akpro Elder Hippocrate",
+     "keys":["akpaelder","hippocrateakpaakproelder","akpaakproelderhippocrate","ahelderakpa"],"faculty":False},
     # 2026-07-24 追加分③
     {"ja":"Huang Jianyu",    "en":"Huang Jianyu",     "keys":["huangjianyu"],                                   "faculty":True,"faculty_from":2024},
     {"ja":"Dawton Billy",    "en":"Billy Dawton",     "keys":["billydawton","dawtonbilly"],                     "faculty":True,"faculty_from":2023},
@@ -386,22 +395,23 @@ for item in items:
         if not full: continue
         if re.match(r'^[A-Za-z]\.?$', full) or len(full) <= 1: continue
         is_first = not paper_authors
+        # 著者名は Zotero の表記をそのまま出す。
+        # 和文業績は日本人が漢字・外国人がローマ字、英文業績は全員ローマ字で
+        # 登録されているので、変換すると業績の言語と表記がずれる。
+        # PERSONS 辞書は ae（引用スタイル用のローマ字）と集計にのみ使う。
         if is_arakawa(full):
-            paper_authors.append("荒川 豊")
+            paper_authors.append(en_first_last(full))
             paper_authors_en.append("Arakawa Yutaka")
             if is_first: first_surname = "Arakawa"
             continue
         pid2 = person_idx(full)
         if pid2 is not None:
-            p2 = PERSONS[pid2]
-            dn = p2["ja"] if has_cjk(p2["ja"]) else p2["en"]
-            en = p2["en"]
+            en = PERSONS[pid2]["en"]
         else:
-            dn = full
             en = "" if has_cjk(full) else full
         if is_first and en:
             first_surname = en.split()[0]
-        paper_authors.append(dn)
+        paper_authors.append(en_first_last(full))
         paper_authors_en.append(en)
         if len(paper_authors) >= 20: break
     # 全員が日本語表記のままなら ae は持たせない（データ量削減）
@@ -452,7 +462,7 @@ print(f"Total items kept: {total_kept} (after title dedup: {len(papers_out)})")
 def display_name(b):
     dja = b["_dja"]
     if has_cjk(dja): return dja
-    return dja if b["ja"] >= b["en"] else b["_den"]
+    return en_first_last(dja if b["ja"] >= b["en"] else b["_den"])
 
 def total_count(b):
     return b["ja"] + b["en"]

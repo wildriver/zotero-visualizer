@@ -636,6 +636,13 @@ function analyze(items,collections,opts){
   // 別表記を指定した場合は、利用者が左側に書いた表記を代表にする
   (opts.aliases||[]).forEach(([a])=>{const k=keyOf(a);if(canon.has(k))canon.set(k,a);});
   const disp2=a=>canon.get(keyOf(a))||a;
+  // 画面表示は欧文だけ「名 姓」にする（Arakawa Yutaka → Yutaka Arakawa）。
+  // 引用スタイル用の ae は splitName が先頭を姓として読むので、こちらは触らない。
+  const enFL=a=>{
+    if(!a||_cjk.test(a))return a;
+    const t=String(a).trim().split(/\s+/);
+    return t.length<2?a:t.slice(1).join(' ')+' '+t[0];
+  };
 
   // 所有者の別表記（荒川 豊 / Arakawa Yutaka）を推定する。
   // 同一人物は1つの論文に1回しか現れないので、
@@ -712,19 +719,23 @@ function analyze(items,collections,opts){
   }
   const top5=m=>[...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5);
   for(const y of years){
-    coa[y]=top5(cA[y]).map(([k,c])=>[canon.get(k)||k,c]);
-    stu[y]=top5(cF[y]).map(([k,c])=>[canon.get(k)||k,c]);
+    coa[y]=top5(cA[y]).map(([k,c])=>[enFL(canon.get(k)||k),c]);
+    stu[y]=top5(cF[y]).map(([k,c])=>[enFL(canon.get(k)||k),c]);
     kw[y]=top5(cK[y]);
   }
 
   const papers=uniq.map(r=>{
-    const o={k:r.key,t:r.title,a:r.authors.map(disp2),y:r.y,c:r.cat,tp:r.tp||[],it:r.it};
+    // 論文リストの著者は Zotero の表記のまま出す（欧文だけ「名 姓」に直す）。
+    // disp2 は表記を代表形に寄せるので、和文業績なら漢字・英文業績ならローマ字という
+    // 業績ごとの言語が崩れてしまう。統一が要るのは共著者カードの集計側だけ。
+    const o={k:r.key,t:r.title,a:r.authors.map(enFL),y:r.y,c:r.cat,tp:r.tp||[],it:r.it};
     for(const f of ['v','doi','u','pg','vl','is','pb'])if(r[f])o[f]=r[f];
-    // 欧文表記があれば引用スタイル用に持たせる
+    // 欧文表記があれば引用スタイル用に持たせる（こちらは「姓 名」順のまま）
     const ae=r.authors.map(a=>{const dn=disp2(a);return _cjk.test(dn)?'':dn;});
     if(ae.some(Boolean))o.ae=ae;
-    const first=o.a[0]||'';
-    if(first&&!_cjk.test(first))o.ra=first.split(/\s+/)[0];
+    // BibTeX の引用キーは姓が要るので、表示用ではなく ae から取る
+    const first=ae[0]||'';
+    if(first)o.ra=first.split(/\s+/)[0];
     return o;
   });
 
