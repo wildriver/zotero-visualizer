@@ -556,27 +556,54 @@ function analyze(items,collections,opts){
   });
   const keyOf=n=>{const k=personKey(n);return aliasMap.get(k)||k;};
 
-  // 氏名の表記ゆれを統合し、最も多く使われている表記を代表にする
-  const forms=new Map();
+  // 氏名の表記ゆれを統合する。まず素の並べ替えキーで集め、
+  // どの表記が使われているかを見てから、姓だけの表記を寄せる。
+  const rawForms=new Map();
   for(const r of uniq)for(const a of r.authors){
-    const k=keyOf(a);if(!k)continue;
-    if(!forms.has(k))forms.set(k,new Map());
-    const m2=forms.get(k);m2.set(a,(m2.get(a)||0)+1);
+    const k=keyOf(a); if(!k)continue;
+    if(!rawForms.has(k))rawForms.set(k,new Map());
+    const m2=rawForms.get(k); m2.set(a,(m2.get(a)||0)+1);
   }
-  const canon=new Map();
-  for(const [k,m2] of forms){
-    canon.set(k,[...m2.entries()].sort((a,b)=>b[1]-a[1]||b[0].length-a[0].length)[0][0]);
-  }
-  const disp=a=>canon.get(keyOf(a))||a;
-
-  // 単独姓（"Arakawa"）を、その語を含むフルネームが1つだけならそちらに寄せる
+  // 「Suwa」のような姓だけの表記を、その姓を含むフルネームが1つだけなら寄せる。
+  // 表示名だけでなく集計キーも寄せないと、別人として数えられてしまう。
   const tokOf=new Map();
-  for(const [k,m2] of forms)tokOf.set(k,new Set(nameTokens([...m2.keys()][0])));
+  for(const [k,m2] of rawForms){
+    const t=new Set();
+    for(const raw of m2.keys())nameTokens(raw).forEach(x=>t.add(x));
+    tokOf.set(k,t);
+  }
+  const useCount=k=>{let n=0;for(const v of (rawForms.get(k)||new Map()).values())n+=v;return n;};
   for(const [k,tk] of tokOf){
     if(tk.size!==1||k.length<3)continue;
     const only=[...tk][0];
-    const cands=[...tokOf.entries()].filter(([k2,t2])=>k2!==k&&t2.size>1&&t2.has(only));
-    if(cands.length===1)canon.set(k,canon.get(cands[0][0]));
+    if(_cjk.test(only))continue;                       // 和名は対象外
+    const cands=[...tokOf.entries()]
+      .filter(([k2,t2])=>k2!==k&&t2.size>1&&t2.has(only))
+      .sort((a,b)=>useCount(b[0])-useCount(a[0]));
+    if(!cands.length)continue;
+    // 候補が1つならそこへ。複数あるときは、件数が突出しているものだけを採る
+    // （「Fukuda」に対して 福田 晃 117件 と Fukuda Shuichi 3件 が並ぶような場合）
+    const top=useCount(cands[0][0]), second=cands.length>1?useCount(cands[1][0]):0;
+    if(cands.length===1||(top>=5&&top>=second*3))aliasMap.set(k,cands[0][0]);
+  }
+
+  // 寄せたあとの対応で数え直す
+  const forms=new Map();
+  for(const r of uniq)for(const a of r.authors){
+    const k=keyOf(a); if(!k)continue;
+    if(!forms.has(k))forms.set(k,new Map());
+    const m2=forms.get(k); m2.set(a,(m2.get(a)||0)+1);
+  }
+  const canon=new Map();
+  for(const [k,m2] of forms){
+    // 代表は「最も多く使われ、かつ姓だけでない」表記
+    const cand=[...m2.entries()].sort((a,b)=>{
+      const la=nameTokens(a[0]).length>1||_cjk.test(a[0]);
+      const lb=nameTokens(b[0]).length>1||_cjk.test(b[0]);
+      if(la!==lb)return la?-1:1;
+      return b[1]-a[1]||b[0].length-a[0].length;
+    });
+    canon.set(k,cand[0][0]);
   }
   // 別表記を指定した場合は、利用者が左側に書いた表記を代表にする
   (opts.aliases||[]).forEach(([a])=>{const k=keyOf(a);if(canon.has(k))canon.set(k,a);});
@@ -824,10 +851,22 @@ function openAliasPanel(){
     panel.style.display='';return;
   }
   const already=new Map(ALIAS_PAIRS.map(([a,b])=>[personKey(a),b]));
-  const rows=ja.slice(0,40).map(([k,c])=>{
+  // 集計に影響する人だけを並べる。数件しか出てこない人まで並べると
+  // 何百行にもなって選ぶ気が失せるため、双方3件以上に限る
+  const MIN=3;
+  const enMain=en.filter(([,c])=>c>=MIN);
+  const target=ja.filter(([k,c])=>{
+    if(c<MIN)return false;
+    const mine=papers.get(k);
+    return enMain.some(([k2])=>{
+      for(const i of papers.get(k2))if(mine.has(i))return false;
+      return true;
+    });
+  }).slice(0,30);
+  const rows=target.map(([k,c])=>{
     // その和名と同じ論文に出ない欧文名だけを候補にする
     const mine=papers.get(k);
-    const opts=en.filter(([k2])=>{
+    const opts=enMain.filter(([k2])=>{
       const other=papers.get(k2);
       for(const i of other)if(mine.has(i))return false;
       return true;
@@ -841,9 +880,11 @@ function openAliasPanel(){
     return `<tr><td class="al-ja">${disp.get(k)}<span class="al-c">${c}件</span></td>`+
            `<td class="al-eq">=</td><td><select class="al-sel" data-ja="${disp.get(k).replace(/"/g,'&quot;')}">${o}</select></td></tr>`;
   }).join('');
+  const done=[...already.values()].filter(Boolean).length;
   panel.innerHTML=
     `<div class="al-head">氏名の対応づけ
-       <span class="al-note">和名と欧文表記が別人として数えられています。同じ人を選んでください（多い順に並んでいます）</span>
+       <span class="al-note">全期間に対して一度だけ設定すれば、どの年を見ても反映されます。
+         別人として数えられている主な共著者 ${target.length} 名（設定済み ${done} 名）。多い順です</span>
        <button class="al-close" onclick="document.getElementById('aliasPanel').style.display='none'">✕</button>
      </div>
      <div class="al-body"><table class="al-tbl">${rows}</table></div>
@@ -869,6 +910,13 @@ function applyAliasPanel(){
   if(!RAW.items){alert('データが読み込まれていません');return;}
   D=analyze(RAW.items,RAW.collections,{ownerName:RAW.ownerName,aliases:pairs});
   document.getElementById('aliasPanel').style.display='none';
+  setupMsg('');
+  const hint=document.getElementById('dhint');
+  if(hint){
+    const old=hint.textContent;
+    hint.textContent=`${pairs.length} 名の表記をまとめました（全期間）`;
+    setTimeout(()=>{hint.textContent=old;},4000);
+  }
   psYear=null;psTopic=null;psAuthor=null;
   document.getElementById('ps').style.display='none';
   ssHide();
