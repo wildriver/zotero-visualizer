@@ -148,6 +148,29 @@ header h1{font-size:26px;font-weight:600;letter-spacing:.01em;}
 .su-details p{margin-top:9px;line-height:1.75;}
 .su-note{margin-top:30px;padding-top:20px;border-top:1px solid var(--border);font-size:12.5px;color:var(--text3);line-height:1.8;}
 .su-note strong{color:var(--text2);}
+/* ── 氏名の対応づけパネル ───── */
+#aliasPanel{max-width:var(--maxw);margin:0 auto 4px;padding:0 24px;}
+.al-head{display:flex;align-items:baseline;gap:12px;font-size:15px;font-weight:600;
+  padding:12px 0 8px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.al-note{font-size:12.5px;font-weight:400;color:var(--text3);}
+.al-close{margin-left:auto;background:transparent;border:none;color:var(--text3);
+  font-size:15px;cursor:pointer;padding:0 4px;}
+.al-close:hover{color:var(--text);}
+.al-body{max-height:340px;overflow-y:auto;padding:8px 0;}
+.al-tbl{width:100%;border-collapse:collapse;}
+.al-tbl td{padding:4px 6px;border-bottom:1px solid var(--grid);vertical-align:middle;}
+.al-ja{font-size:14px;white-space:nowrap;}
+.al-c{font-family:var(--mono);font-size:11.5px;color:var(--text3);margin-left:8px;}
+.al-eq{color:var(--text3);width:22px;text-align:center;}
+.al-sel{font-family:var(--sans);font-size:13.5px;color:var(--text);background:var(--surface);
+  border:1px solid var(--border);border-radius:6px;padding:4px 8px;max-width:340px;width:100%;}
+.al-sel:focus{border-color:var(--c2);outline:none;}
+.al-foot{display:flex;align-items:center;gap:12px;padding:12px 0 4px;flex-wrap:wrap;}
+.al-empty{padding:16px 0;font-size:14px;color:var(--text3);}
+.al-open{font-family:var(--sans);font-size:12.5px;color:var(--text2);background:transparent;
+  border:1px solid var(--border);border-radius:10px;padding:3px 11px;cursor:pointer;
+  transition:border-color .15s,color .15s;}
+.al-open:hover{color:var(--c2);border-color:var(--c2);}
 </style>
 <div id="setup">
   <div class="su-eyebrow">Zotero Publication Visualizer</div>
@@ -266,10 +289,12 @@ header h1{font-size:26px;font-weight:600;letter-spacing:.01em;}
   <div class="topic-label">研究トピックの変遷（論文タイトルから自動抽出）</div>
   <div class="topic-grid" id="tgrid"></div>
 </div>
+<div id="aliasPanel" style="display:none"></div>
 <div class="detail-section">
   <div class="detail-hdr">
     <span id="dyr" class="dhyr"></span>
     <span id="dtot" class="dhtot"></span>
+    <button class="al-open" onclick="openAliasPanel()" title="和名と欧文表記を同じ人物としてまとめます">氏名の対応づけ</button>
     <span class="detail-note" id="dhint">バーまたはトピックをクリックで固定</span>
   </div>
   <div class="detail-grid">
@@ -652,6 +677,8 @@ function analyze(items,collections,opts){
     years,col_order:COLS,total:uniq.length,year_by_col,
     year_top_coauthors:coa,year_top_students:stu,year_top_keywords:kw,
     papers,_owner:ownerName,
+    // 対応づけUIで本人を候補から外すために持たせる
+    _ownerForms:[...ownerKeys].map(k=>canon.get(k)||k),
   };
 }
 
@@ -677,7 +704,14 @@ function parseLibInput(s){
   if(m)return{type:'users',id:m[1]};
   return null;
 }
+let RAW={items:null,collections:null,lib:null,ownerName:''};
 async function startLoad(lib,key,ownerName,zuser,aliases){
+  // デモのライブラリは、どの入口から来ても用意した対応表を使う
+  if(lib.id===DEMO.id&&(!aliases||!aliases.length)){
+    aliases=DEMO_ALIAS.map(l=>l.split(/\s*=\s*/)).filter(x=>x.length===2);
+    const el=document.getElementById('suAlias');
+    if(el&&!el.value.trim())el.value=DEMO.alias;
+  }
   const base=`https://api.zotero.org/${lib.type}/${lib.id}`;
   setupMsg('コレクションを取得中…');
   const collections=await zPaged(base,'/collections',key);
@@ -686,6 +720,7 @@ async function startLoad(lib,key,ownerName,zuser,aliases){
     setupMsg(`文献を取得中… ${n}/${t}`);
   });
   setupMsg('集計中…');
+  RAW={items,collections,lib,ownerName};   // 対応づけをやり直せるよう保持する
   D=analyze(items,collections,{ownerName,aliases});
   CFG.ownerName=ownerName||D._owner||'';
   CFG.zoteroUsername=zuser||'';
@@ -746,6 +781,98 @@ function wireSetup(){
     }
   }
   if(q.has('demo')){$('suDemo').click();}
+}
+
+/* ══════════════════════════════════════════════════════════
+   氏名の対応づけ（和名 ⇔ 欧文表記）
+
+   文字種が違うため機械的には同一人物と判定できない。
+   共著関係や活動年から推測する方法も試したが、実データでの的中率は
+   0〜36% にとどまり、誤って別人を統合してしまうため採用しなかった。
+   そこで、候補を並べて利用者が選ぶ形にしている。
+   ══════════════════════════════════════════════════════════ */
+let ALIAS_PAIRS=[];
+
+function collectNameCandidates(){
+  // 同じ論文に一緒に出る二人は別人なので、候補から外せる
+  const cnt=new Map(),disp=new Map(),papers=new Map();
+  (D.papers||[]).forEach((p,i)=>{
+    const ks=[];
+    (p.a||[]).forEach(a=>{
+      const k=personKey(a); if(!k)return;
+      ks.push(k); cnt.set(k,(cnt.get(k)||0)+1);
+      if(!disp.has(k))disp.set(k,a);
+      if(!papers.has(k))papers.set(k,new Set());
+      papers.get(k).add(i);
+    });
+  });
+  // 本人（和名も欧文表記も）は対応づけの対象外
+  const ownerKeys=new Set([personKey(CFG.ownerName||''),
+                           ...((D._ownerForms||[]).map(personKey))].filter(Boolean));
+  const list=[...cnt.entries()].filter(([k,c])=>c>=2&&!ownerKeys.has(k))
+    .sort((a,b)=>b[1]-a[1]);
+  const ja=list.filter(([k])=>_cjk.test(disp.get(k)));
+  const en=list.filter(([k])=>!_cjk.test(disp.get(k)));
+  return {ja,en,disp,papers};
+}
+
+function openAliasPanel(){
+  const {ja,en,disp,papers}=collectNameCandidates();
+  const panel=document.getElementById('aliasPanel');
+  if(!ja.length||!en.length){
+    panel.innerHTML='<div class="al-empty">和名と欧文表記が混在していないため、対応づけの必要はありません。</div>';
+    panel.style.display='';return;
+  }
+  const already=new Map(ALIAS_PAIRS.map(([a,b])=>[personKey(a),b]));
+  const rows=ja.slice(0,40).map(([k,c])=>{
+    // その和名と同じ論文に出ない欧文名だけを候補にする
+    const mine=papers.get(k);
+    const opts=en.filter(([k2])=>{
+      const other=papers.get(k2);
+      for(const i of other)if(mine.has(i))return false;
+      return true;
+    });
+    const cur=already.get(k)||'';
+    const o=['<option value="">（対応なし）</option>']
+      .concat(opts.map(([k2,c2])=>{
+        const n=disp.get(k2);
+        return `<option value="${n.replace(/"/g,'&quot;')}"${n===cur?' selected':''}>${n}（${c2}件）</option>`;
+      })).join('');
+    return `<tr><td class="al-ja">${disp.get(k)}<span class="al-c">${c}件</span></td>`+
+           `<td class="al-eq">=</td><td><select class="al-sel" data-ja="${disp.get(k).replace(/"/g,'&quot;')}">${o}</select></td></tr>`;
+  }).join('');
+  panel.innerHTML=
+    `<div class="al-head">氏名の対応づけ
+       <span class="al-note">和名と欧文表記が別人として数えられています。同じ人を選んでください（多い順に並んでいます）</span>
+       <button class="al-close" onclick="document.getElementById('aliasPanel').style.display='none'">✕</button>
+     </div>
+     <div class="al-body"><table class="al-tbl">${rows}</table></div>
+     <div class="al-foot">
+       <button class="su-btn" onclick="applyAliasPanel()">この対応で集計し直す</button>
+       <span class="al-note">選んだ内容はこのブラウザに保存され、次回も使われます</span>
+     </div>`;
+  panel.style.display='';
+  panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function applyAliasPanel(){
+  const pairs=[];
+  document.querySelectorAll('#aliasPanel .al-sel').forEach(sel=>{
+    if(sel.value)pairs.push([sel.dataset.ja,sel.value]);
+  });
+  ALIAS_PAIRS=pairs;
+  try{
+    const saved=JSON.parse(localStorage.getItem('zvSetup')||'{}');
+    saved.alias=pairs.map(([a,b])=>`${a} = ${b}`).join('\n');
+    localStorage.setItem('zvSetup',JSON.stringify(saved));
+  }catch(e){}
+  if(!RAW.items){alert('データが読み込まれていません');return;}
+  D=analyze(RAW.items,RAW.collections,{ownerName:RAW.ownerName,aliases:pairs});
+  document.getElementById('aliasPanel').style.display='none';
+  psYear=null;psTopic=null;psAuthor=null;
+  document.getElementById('ps').style.display='none';
+  ssHide();
+  boot();
 }
 
 const cv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
