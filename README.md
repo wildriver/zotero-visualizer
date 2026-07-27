@@ -2,7 +2,7 @@
 
 **Zoteroに集約した研究業績を、たどれる形にする。** ブラウザだけで動きます。サーバーもインストールも不要です。
 
-🔗 **[デモを開く（荒川 豊の業績 1,050件）](https://wildriver.github.io/zotero-visualizer/?demo=1)** — 自分のZoteroユーザーIDを入れれば、そのまま自分の業績を可視化できます
+🔗 **[デモを開く（荒川 豊の業績 983件）](https://wildriver.github.io/zotero-visualizer/?demo=1)** — 自分のZoteroユーザーIDを入れれば、そのまま自分の業績を可視化できます
 
 <p align="center">
   <img src="docs/images/02-timeline.png" alt="研究業績のタイムライン" width="100%">
@@ -212,5 +212,5 @@ export ZOTERO_USER_ID=1234567
 
 MIT
 
-このツールと手引きは、著者1人が1,050件の業績をZoteroへ集約した経験から作られています。
+このツールと手引きは、著者1人が983件の業績をZoteroへ集約した経験から作られています。
 手引きに出てくる件数はその1例の実測値で、一般的な目安ではありません。
