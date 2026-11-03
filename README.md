@@ -214,3 +214,6 @@ MIT
 
 このツールと手引きは、著者1人が983件の業績をZoteroへ集約した経験から作られています。
 手引きに出てくる件数はその1例の実測値で、一般的な目安ではありません。
+
+
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/rkwytk)
