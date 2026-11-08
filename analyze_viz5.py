@@ -446,15 +446,21 @@ for item in items:
         rec["ae"] = paper_authors_en
     for kk, vv in extra.items():
         if vv: rec[kk] = vv
+    # 完全な複製の判定に使う（出力には含めない）。extra まで比べるのは、
+    # 論文とデモのように題目・会場・ページまで同じ別業績があるため
+    rec["_dup"] = (normkey(clean_t), year, normkey(venue), extra["doi"], extra["pg"],
+                   tuple(paper_authors), norm(d.get("extra", "")))
     papers_out.append(rec)
 
-# タイトルベース重複排除（同一タイトルが複数カテゴリに登録されている場合）
-seen_titles = set()
+# 完全な複製だけを落とす。題目だけで判定すると、同じ題目で別の場に出した発表
+# （黒木 DEIM2026 / DPSWS2026）や、論文とデモ（谷澤 DICOMO2024）まで消えてしまう。
+# Zotero 側の重複は 2026-07 に整理済みなので、ここで拾うのはコネクタの二重取り込み程度
+seen_dup = set()
 deduped_papers = []
 for p in papers_out:
-    tk = normkey(p["t"])
-    if tk not in seen_titles:
-        seen_titles.add(tk)
+    k = p.pop("_dup")
+    if k not in seen_dup:
+        seen_dup.add(k)
         deduped_papers.append(p)
 papers_out = deduped_papers
 print(f"Total items kept: {total_kept} (after title dedup: {len(papers_out)})")

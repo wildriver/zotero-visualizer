@@ -534,6 +534,7 @@ function analyze(items,collections,opts){
       v:(d.publicationTitle||d.proceedingsTitle||d.bookTitle||d.conferenceName||d.meetingName||'').trim(),
       doi:(d.DOI||'').trim(),u:(d.url||'').trim(),pg:(d.pages||'').trim(),
       vl:(d.volume||'').trim(),is:(d.issue||'').trim(),pb:(d.publisher||'').trim(),
+      _ex:(d.extra||'').trim(),
     });
   }
   if(!rows.length)throw new Error('対象となる文献が見つかりませんでした。コレクションと発行年が設定されているか確認してください。');
@@ -544,9 +545,14 @@ function analyze(items,collections,opts){
   const byType=uncatRate>0.7;
   if(byType)rows.forEach(r=>{r.cat=r._type;});
 
-  // 同一タイトルの重複を落とす
+  // 完全な複製（コネクタで二重に取り込んだものなど）だけを落とす。
+  // 題目だけで判定すると、同じ題目で別の場に出した発表や、論文とデモのように
+  // 会場やページまで同じ別業績も消えてしまうので、extra まで比べる
   const seen=new Set(),uniq=[];
-  for(const r of rows){const k=normkey(r.title);if(seen.has(k))continue;seen.add(k);uniq.push(r);}
+  for(const r of rows){
+    const k=JSON.stringify([normkey(r.title),r.y,normkey(r.v),r.doi,r.pg,r.authors,r._ex]);
+    if(seen.has(k))continue;seen.add(k);uniq.push(r);
+  }
 
   // 和名と欧文表記（安本 慶一 / Yasumoto Keiichi）は文字種が違うため自動では結び付けられない。
   // 利用者が "A = B" 形式で指定した対応を反映する。
